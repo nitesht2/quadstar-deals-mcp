@@ -779,6 +779,30 @@ def purge_old_posted_deals(keep_days: int = 7) -> int:
     return purged
 
 
+def get_engagement_by_hour() -> dict:
+    """Average engagement per PST hour-of-day from past posts.
+
+    Data-driven posting-time signal: post when YOUR audience actually engaged.
+    Returns {pst_hour:int -> avg_engagement_score} for hours that have data.
+    Empty until enough posts have engagement recorded (then it self-improves).
+    """
+    from collections import defaultdict
+    recs = _safe_load_json(os.path.join(DATA_DIR, "tweet_performance.json"), [])
+    buckets: dict[int, list] = defaultdict(list)
+    for r in recs:
+        ts = r.get("posted_at", "")
+        eng = r.get("engagement_score")
+        if not ts or eng is None:
+            continue
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", ""))
+            pst_hour = (dt.hour - 7) % 24  # server is UTC -> PDT
+            buckets[pst_hour].append(float(eng))
+        except (ValueError, TypeError):
+            continue
+    return {h: round(sum(v) / len(v), 2) for h, v in sorted(buckets.items())}
+
+
 def cleanup_deals() -> dict:
     """Run all cleanup tasks. Called at start of each pipeline run.
     Returns summary dict.

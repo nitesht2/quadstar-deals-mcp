@@ -204,15 +204,22 @@ def _ingest_deals(deals) -> str:
         # voice is Hermes's (loaded from ~/.voice/), not the backend notifier's.
         t1 = (raw.get("tweet_1") or raw.get("copy") or "").strip()
         t2 = (raw.get("tweet_2") or "").strip()
+        # Hermes-picked posting time (optional): ISO 8601 UTC + a one-line reason.
+        sched_at = (raw.get("schedule_at") or "").strip()
+        sched_reason = (raw.get("schedule_reason") or "").strip()[:200]
+
         if t1:
             deal["hermes_tweet_1"] = t1[:280]
             deal["hermes_tweet_2"] = t2[:280]
             deal["hermes_linkedin"] = (raw.get("linkedin_post") or "").strip()
             deal["copy_source"] = "hermes"
+        if sched_at:
+            deal["schedule_at"] = sched_at
+            deal["schedule_reason"] = sched_reason
 
         # Lean-split bridge: if the backend already scraped this ASIN, attach
-        # Hermes's copy to that existing un-posted deal (don't dup-filter it).
-        if t1 and asin:
+        # Hermes's copy + chosen time to that existing un-posted deal (don't dup-filter).
+        if (t1 or sched_at) and asin:
             from src.database import _load_deals, update_deal
             existing = next(
                 (d for d in _load_deals()
@@ -220,12 +227,18 @@ def _ingest_deals(deals) -> str:
                 None,
             )
             if existing:
-                update_deal(existing["id"], {
-                    "hermes_tweet_1": deal["hermes_tweet_1"],
-                    "hermes_tweet_2": deal["hermes_tweet_2"],
-                    "hermes_linkedin": deal["hermes_linkedin"],
-                    "copy_source": "hermes",
-                })
+                patch = {}
+                if t1:
+                    patch.update({
+                        "hermes_tweet_1": deal["hermes_tweet_1"],
+                        "hermes_tweet_2": deal["hermes_tweet_2"],
+                        "hermes_linkedin": deal["hermes_linkedin"],
+                        "copy_source": "hermes",
+                    })
+                if sched_at:
+                    patch["schedule_at"] = sched_at
+                    patch["schedule_reason"] = sched_reason
+                update_deal(existing["id"], patch)
                 updated += 1
                 continue
 
@@ -686,6 +699,32 @@ def _add_category(name: str, keywords: str) -> str:
     with open(path, "w") as f:
         json.dump(cats, f, indent=2)
     return f"Added category '{name}' with {len(kw_list)} keywords"
+
+
+def _get_posting_insights() -> str:
+    """Posting-time insights for smart scheduling (JSON).
+
+    Gives the agent what it needs to choose a post time that maximizes reach
+    without collisions:
+      - engagement_by_pst_hour: avg engagement per PST hour from YOUR past posts
+        (post when your audience actually engaged). Empty until enough data.
+      - default_peak_pst_hours: fallback best hours when there's little data.
+      - already_booked_utc_slots: times already scheduled in Postiz — DO NOT reuse.
+      - active_hours_pst: only post inside this window.
+    """
+    from src.database import get_engagement_by_hour
+    try:
+        from src.postiz_client import _get_scheduled_times
+        booked = sorted(_get_scheduled_times())
+    except Exception:
+        booked = []
+    return json.dumps({
+        "engagement_by_pst_hour": get_engagement_by_hour(),
+        "default_peak_pst_hours": [5, 8, 12, 17],
+        "already_booked_utc_slots": booked,
+        "active_hours_pst": "4:30am-7pm",
+        "note": "Choose a PST time in active hours, favor a high-engagement hour, avoid already_booked. Return schedule_at as ISO 8601 UTC (e.g. 2026-06-01T23:30:00Z) on each deal you ingest, plus a one-line schedule_reason.",
+    })
 
 
 def run_agent(command: str, thread_id: str = "default") -> str:

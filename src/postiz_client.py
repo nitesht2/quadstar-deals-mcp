@@ -461,6 +461,50 @@ def get_smart_time() -> tuple[str, str]:
         return iso, label
 
 
+def resolve_schedule_time(deal_id: int) -> tuple[str, str]:
+    """Pick the post time for a deal.
+
+    Prefers Hermes's chosen time (deal['schedule_at'], ISO) when it's valid
+    (parseable + at least 30 min out), nudged 15 min at a time off any slot
+    already booked in Postiz. Falls back to the deterministic get_smart_time()
+    if Hermes set nothing or set something unusable. So even when Hermes picks,
+    the time is guaranteed valid and conflict-free; and if Hermes flakes, a smart
+    time still gets chosen — the card is never timeless.
+    """
+    from datetime import datetime, timezone, timedelta
+    try:
+        from src.database import get_deal_by_id
+        deal = get_deal_by_id(deal_id) or {}
+    except Exception:
+        deal = {}
+    raw = (deal.get("schedule_at") or "").strip()
+    if raw:
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.astimezone(timezone.utc)
+            now = datetime.now(timezone.utc)
+            if (dt - now).total_seconds() >= 1800:
+                pst_offset = _pst_utc_offset_hours(now)
+                with _batch_lock:
+                    booked = _get_scheduled_times() | set(_batch_proposed)
+                    for _ in range(8):  # nudge off collisions, max ~2h
+                        if dt.strftime("%Y-%m-%dT%H:%M") not in booked:
+                            break
+                        dt += timedelta(minutes=15)
+                    label = _format_pst_label(dt, pst_offset)
+                    iso = dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+                    _batch_proposed.add(dt.strftime("%Y-%m-%dT%H:%M"))
+                    print(f"  [schedule] using Hermes-picked time {label} for deal {deal_id}")
+                    return iso, label
+            else:
+                print(f"  [schedule] Hermes time for deal {deal_id} too soon — smart fallback")
+        except Exception as exc:
+            print(f"  [schedule] Hermes schedule_at '{raw}' invalid ({exc}) — smart fallback")
+    return get_smart_time()
+
+
 def get_post_now_time() -> tuple[str, str]:
     """Return (iso_string, label) for posting ASAP. Stagger by 5 min if slot is taken."""
     from datetime import datetime, timezone, timedelta

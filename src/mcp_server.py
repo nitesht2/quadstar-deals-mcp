@@ -155,6 +155,14 @@ def get_status() -> str:
 
 
 @mcp.tool()
+def get_posting_insights() -> str:
+    """Smart-scheduling insights (JSON): engagement-by-PST-hour from your past posts,
+    default peak hours, and slots already booked in Postiz to avoid. Use this to
+    choose each deal's schedule_at (ISO 8601 UTC) when you ingest it."""
+    return agent._get_posting_insights()
+
+
+@mcp.tool()
 def add_category(name: str, keywords: str) -> str:
     """Register a new product category. keywords = comma-separated list."""
     return agent._add_category(name, keywords)

@@ -403,10 +403,10 @@ class DealApproveButton(Button):
         try:
             did, plat = _parse_custom_id(self.custom_id)
             print(f"  [approve] Deal {did} ({plat or 'all'}) approved by {interaction.user}", flush=True)
-            from src.postiz_client import get_smart_time
+            from src.postiz_client import resolve_schedule_time
 
             loop = asyncio.get_event_loop()
-            post_time, label = get_smart_time()
+            post_time, label = resolve_schedule_time(did)  # prefers Hermes-picked time, else smart fallback
             status = await loop.run_in_executor(None, _schedule_deal, did, post_time, plat or None)
             print(f"  [approve] Schedule result for deal {did} ({plat or 'all'}): {status}", flush=True)
             if status == "expired":
@@ -545,10 +545,10 @@ class DealRejectButton(Button):
 
 async def _send_twitter_card(channel, deal: dict, content: dict):
     """Send a Twitter deal card: Tweet 1 → Image → Tweet 2 → Buttons."""
-    from src.postiz_client import get_smart_time
+    from src.postiz_client import resolve_schedule_time
 
     deal_url = deal.get("affiliate_url") or deal.get("source_url", "")
-    proposed_time, proposed_label = get_smart_time()
+    proposed_time, proposed_label = resolve_schedule_time(deal["id"])  # Hermes-picked time if set
 
     await channel.send("**Tweet 1** — copy and post with the image below:", suppress_embeds=True)
     await asyncio.sleep(0.3)
@@ -575,6 +575,7 @@ async def _send_twitter_card(channel, deal: dict, content: dict):
         f"**Link:** {deal_url}\n"
         f"**Platform:** Twitter/X\n"
         f"**Best time:** {proposed_label}"
+        + (f"  _( {deal['schedule_reason']} )_" if deal.get("schedule_reason") else "")
     )
     await channel.send(
         action_msg,
@@ -585,10 +586,10 @@ async def _send_twitter_card(channel, deal: dict, content: dict):
 
 async def _send_linkedin_card(channel, deal: dict, content: dict):
     """Send a LinkedIn deal card: LinkedIn post preview → Image → Buttons."""
-    from src.postiz_client import get_smart_time
+    from src.postiz_client import resolve_schedule_time
 
     deal_url = deal.get("affiliate_url") or deal.get("source_url", "")
-    proposed_time, proposed_label = get_smart_time()
+    proposed_time, proposed_label = resolve_schedule_time(deal["id"])  # Hermes-picked time if set
 
     li_post = content.get("linkedin_post", "")
     if not li_post:
