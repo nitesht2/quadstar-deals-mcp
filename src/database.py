@@ -463,6 +463,11 @@ def save_deal(deal: dict) -> bool:
     deals.append(deal)
 
     _save_deals(deals)
+    try:
+        from src.archive import archive_deal
+        archive_deal(deal)  # permanent SQLite history (fire-and-forget)
+    except Exception:
+        pass
     return True
 
 
@@ -693,13 +698,22 @@ def mark_as_posted(deal_id: int):
     """Mark a deal as posted."""
     deals = _load_deals()
     posted_source = None
+    posted_deal = None
     for deal in deals:
         if deal.get("id") == deal_id:
             deal["is_posted"] = True
             deal["posted_at"] = datetime.now().isoformat()
             posted_source = deal.get("source")
+            posted_deal = deal
             break
     _save_deals(deals)
+    # Permanent SQLite record of the post (fire-and-forget)
+    if posted_deal:
+        try:
+            from src.archive import archive_post
+            archive_post(posted_deal)
+        except Exception:
+            pass
     # Track which source produced a posted deal (fire-and-forget)
     if posted_source:
         try:

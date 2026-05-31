@@ -28,3 +28,8 @@ graphify-out/
 
 # Environment variables
 .env
+
+# SQLite permanent archive (runtime data)
+data/quadstar.db
+data/quadstar.db-wal
+data/quadstar.db-shm
