@@ -1,8 +1,8 @@
 # QuadStar Deals — autonomous pipeline (hybrid: backend guarantees cards, Hermes adds voice copy best-effort).
 # Times UTC = 8am / 12pm / 5pm / 7pm PDT. Install: ( crontab -l; cat deploy/crontab.txt ) | crontab -
 # :00 backend scrape (Scrapling stealth, reliable) -> populates the deal queue
-0 15,19,0,2 * * * curl -s -m 600 -X POST http://127.0.0.1:8001/webhook/openclaw -H "Content-Type: application/json" -d '{"message":"scrape tech"}' >> /var/log/quadstar-cron.log 2>&1
+0 15,19,0,2 * * * curl -s -m 600 -X POST http://127.0.0.1:8001/webhook/hermes -H "Content-Type: application/json" -d '{"message":"scrape tech"}' >> /var/log/quadstar-cron.log 2>&1
 # :10 Hermes (deepseek-flash) curates + writes voice copy + attaches it (best-effort; if it flakes, no harm)
 10 15,19,0,2 * * * /opt/quadstar-deals/scripts/run_hermes_mission.sh >> /var/log/quadstar-cron.log 2>&1
 # :20 backend sends Discord approval cards (RELIABLE; uses Hermes voice copy if attached, else DeepSeek fallback)
-20 15,19,0,2 * * * curl -s -m 120 -X POST http://127.0.0.1:8001/webhook/openclaw -H "Content-Type: application/json" -d '{"message":"send cards"}' >> /var/log/quadstar-cron.log 2>&1
+20 15,19,0,2 * * * curl -s -m 120 -X POST http://127.0.0.1:8001/webhook/hermes -H "Content-Type: application/json" -d '{"message":"send cards"}' >> /var/log/quadstar-cron.log 2>&1

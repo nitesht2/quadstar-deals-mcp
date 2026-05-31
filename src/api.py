@@ -364,16 +364,15 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/webhook/openclaw")
-async def openclaw_webhook(request: Request):
+@app.post("/webhook/hermes")
+@app.post("/webhook/openclaw")  # legacy alias — kept so old cron entries don't break
+async def hermes_webhook(request: Request):
     """
-    Receives OpenClaw webhook and routes natural-language commands to the agent.
+    Receives a free-text command (from Hermes / cron / curl) and routes it through
+    tool_router.dispatch() to the matching backend tool.
 
-    OpenClaw setup (one-time):
-      Webhook URL: http://localhost:8001/webhook/openclaw
-      Trigger: on_message
+      Webhook URL: http://localhost:8001/webhook/hermes
       Method: POST
-
     Supported body formats: {"message": "..."} or {"content": "..."} or {"text": "..."}
     """
     body = await request.json()
