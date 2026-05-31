@@ -199,6 +199,17 @@ def _ingest_deals(deals) -> str:
             "source": raw.get("source", "hermes"),
         }
 
+        # Hermes-written copy (optional). When present, the approval card uses
+        # THIS copy verbatim instead of regenerating via the backend LLM — so the
+        # voice is Hermes's (loaded from ~/.voice/), not the backend notifier's.
+        t1 = (raw.get("tweet_1") or raw.get("copy") or "").strip()
+        t2 = (raw.get("tweet_2") or "").strip()
+        if t1:
+            deal["hermes_tweet_1"] = t1[:280]
+            deal["hermes_tweet_2"] = t2[:280]
+            deal["hermes_linkedin"] = (raw.get("linkedin_post") or "").strip()
+            deal["copy_source"] = "hermes"
+
         try:
             if save_deal(deal):
                 saved += 1
@@ -230,7 +241,16 @@ def _generate_and_send_cards(limit: int = 5) -> str:
     sent = 0
     for deal in deals:
         try:
-            content = generate_deal_content(deal)
+            # Prefer Hermes-written copy (its own voice); fall back to backend LLM.
+            if deal.get("hermes_tweet_1"):
+                content = {
+                    "tweet_1": deal["hermes_tweet_1"],
+                    "tweet_2": deal.get("hermes_tweet_2", ""),
+                    "linkedin_post": deal.get("hermes_linkedin", ""),
+                    "confidence": 1.0,
+                }
+            else:
+                content = generate_deal_content(deal)
             asyncio.run_coroutine_threadsafe(send_deal_card(deal, content), loop)
             sent += 1
         except Exception as e:

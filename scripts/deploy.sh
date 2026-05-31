@@ -13,7 +13,10 @@ DEST=/opt/quadstar-deals
 cd "$(dirname "$0")/.."
 
 echo "→ rsync → ${VPS}:${DEST}"
-rsync -az --delete \
+# NOTE: intentionally NO --delete. The VPS holds runtime-only state not in the
+# repo (.env, data/, and previously .voice/) — --delete once silently wiped the
+# voice files. Additive sync only; prune the VPS by hand if ever needed.
+rsync -az \
   --exclude 'venv/' --exclude '.venv/' --exclude '__pycache__/' --exclude '*.pyc' \
   --exclude 'graphify-out/' --exclude 'data/' --exclude '.env' \
   -e 'ssh -o BatchMode=yes' \
