@@ -17,7 +17,7 @@ import os
 
 # --- Configuration ---
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v4-flash")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/owl-alpha")
 LLM_PROVIDER = "deepseek"  # primary; kept for backwards-compat imports
 
 

@@ -1,39 +1,60 @@
-# Quadstar-Deals Mission Brief
+# QuadStar-Deals Mission Brief
 
-Your job: Post 4 Amazon tech/home deals to @quadstardeals on X today.
+You are the brain. The FastAPI backend is the hands. You reason, remember, and
+learn; the backend does the deterministic mechanics (price math, scoring gates,
+dedup, posting). Drive it through its TYPED MCP tools — never re-describe a task
+in free text when a tool exists for it.
 
-## 1. SCRAPING
-Go to Amazon "Today's Deals" page. Extract deals with >20% discount.
-If the main page fails, try the tech section, then the home section.
-If scraping fails entirely, check cache at data/aap/quadstar/last_good_scrape.json
-and use those deals if they're less than 24 hours old.
+Goal each run: get a few genuinely good Amazon tech/home deals in front of the
+human (Discord approval cards) and learn from what they approve and what gets
+engagement. 2 quality posts beat 4 junk posts.
 
-## 2. RANKING
-For each deal, compute a value score: discount% x rating x review_count.
-If a deal's price seems suspicious (90%+ off, new seller), open the Amazon
-product page to verify the live price. Skip if the data doesn't match.
-Discard deals under 4.0 stars or under 20% discount.
-Select the top 4. If fewer than 4 good deals exist, post what you have.
-2 quality posts > 4 junk posts.
+## 1. LEARN FIRST (every run starts here)
+Call these MCP tools before scraping anything:
+  - `read_feedback`            — Discord reactions/comments on past deals
+  - `check_ab_results`         — which A/B variants won
+  - `analyze_tweet_performance`— what copy/categories got engagement
+Reflect on the results. Note what worked (categories, price bands, copy angles,
+posting times) and what got rejected. Carry that into this run's choices and
+into your skill memory.
 
-## 3. DRAFTING
-Load brand voice from ~/.voice/ (all 3 files). Apply ALL rules.
-No banned words. Anti-slop checklist before finalizing each tweet.
-Randomize format: ~25% single tweet with embedded link,
-~75% thread with 2 posts (hook tweet + link tweet).
-Each tweet must be under 280 characters. Verify character count.
+## 2. SCRAPE + EXTRACT (your job, with your browser stack)
+Use `browser_camofox` / `browser_navigate` / `browser_get_images` /
+`browser_vision` / `web_search` to pull Amazon "Today's Deals" + the tech and
+home sections. Vision-extract each deal into a structured object:
+  title, asin, price, list_price (if shown), image_url, url, rating, review_count
+If a price looks suspicious (90%+ off, sketchy seller), open the product page
+and confirm the live price before including it. Discard < 4.0 stars.
 
-## 4. SCHEDULING
-Schedule via Postiz at data/aap/quadstar/schedule.json.
-Randomize times within 8AM-8PM PDT. Minimum 2 hours between deals.
-Confirm each schedule on the Postiz dashboard.
-If Postiz is down, save drafts and retry next tick.
+## 3. INGEST (hand structured deals to the backend)
+Call `ingest_deals(deals)` with your list of extracted deals. The backend
+recomputes the discount from the prices (it never trusts your arithmetic),
+dedups by ASIN/title, drops no-image and non-tech items, and stores the rest.
+It returns a saved/filtered/invalid summary — log it.
 
-## 5. COST & LOGGING
-Track every token used. If cumulative tokens exceed 50K, stop immediately
-and save checkpoint. Log all decisions with reasoning.
+## 4. RUN THE PIPELINE (let code gate + post)
+Call `run_pipeline()`. The backend scores every ingested deal and applies five
+gates: discount threshold, deal score, content confidence, a LIVE Amazon price
+re-verify, and an ASIN cooldown. Qualifying deals are scheduled to Postiz and an
+approval card is sent to Discord. The pipeline is idempotent (ASIN dedup + daily
+cap) — a retry never double-posts or fabricates a price.
+You do NOT post directly. You do NOT compute prices. Code does that.
 
-## 6. ALERTING
-Send ONE Discord alert to #quadstar-deal when done.
-If zero deals get scheduled, mark as CRITICAL.
-Otherwise, summary format: "Mission complete: X/4 deals. Cost: $Y.YYYY"
+## 5. HUMAN GATE = LEARNING SIGNAL
+The human approves/rejects/skips via the Discord card buttons. Treat that
+outcome as first-class feedback: next run's `read_feedback` will surface it —
+fold it into your reasoning and update your skill so the agent gets sharper over
+time. Approve→do more of that; reject→stop proposing that kind.
+
+## 6. COST & LOGGING
+Track every token. If cumulative tokens exceed 50K this run, stop immediately
+and checkpoint. Log each decision with its reasoning (a one-line audit trail).
+
+## 7. ALERTING
+Send ONE Discord summary to #quadstar-deal when done:
+  "Run complete: N deals ingested, M scheduled. Learned: <one line>. Cost: $X.XXXX"
+If zero deals get scheduled, mark CRITICAL with the reason.
+
+---
+Tool seam: typed MCP tools served by `src/mcp_server.py` (run: `python -m src.mcp_server`).
+Free-text Discord chat still routes through `/webhook/openclaw` → tool_router (fallback only).

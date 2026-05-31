@@ -14,7 +14,7 @@ import re
 _INTENT_SCHEMA = """
 Return ONLY valid JSON:
 {
-  "intent": one of [pipeline, scrape, cards, status, unposted, schedule,
+  "intent": one of [pipeline, scrape, ingest, cards, status, unposted, schedule,
                     telegram, feedback, price_check, watchlist, cancel_drop,
                     ab_results, tweet_perf, add_category, browse],
   "params": {
@@ -130,6 +130,7 @@ def dispatch(command: str) -> str:
 
     dispatch_map = {
         "scrape":       lambda: _a._scrape_deals(p.get("category", "tech")),
+        "ingest":       lambda: _a._ingest_deals(p.get("deals", [])),
         "cards":        lambda: _a._generate_and_send_cards(p.get("limit", 5)),
         "status":       lambda: _a._get_status(),
         "unposted":     lambda: _a._get_unposted_deals(p.get("limit", 5)),

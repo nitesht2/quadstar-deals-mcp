@@ -40,7 +40,7 @@ LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v4-flash")
 # Fallback: OpenRouter free tier (used automatically when DeepSeek errors/rate-limits)
 # Get your key at https://openrouter.ai/keys — free models end in ":free"
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/owl-alpha")
 
 # Brand settings — change these in .env to rename without touching any code
 BRAND_NAME = os.getenv("BRAND_NAME", "QuadStar Deals")

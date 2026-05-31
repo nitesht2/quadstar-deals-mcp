@@ -9,6 +9,7 @@ the /webhook/openclaw endpoint. Used by the Discord bot buttons and Hermes.
 
 Tools:
   scrape_deals        - Scrape Amazon + aggregator deals for a category
+  ingest_deals        - Persist Hermes-extracted structured deals (scrape replacement)
   get_unposted_deals  - Fetch top ranked unposted deals
   generate_and_send_cards - Generate tweet content + send Discord approval cards
   schedule_to_postiz  - Schedule an approved deal to social platforms
@@ -76,6 +77,139 @@ def _scrape_deals(category: str = "tech") -> str:
     except Exception:
         pass  # Firecrawl key may not be set; graceful fallback
     return f"Scraped {amazon_count} Amazon + {agg_count} aggregator deals ({category})"
+
+
+def _ingest_deals(deals) -> str:
+    """Ingest Hermes-extracted structured deals into the pipeline DB.
+
+    The Phase-3 seam: Hermes owns scraping + vision extraction, then hands
+    structured deals to this backend, which owns the mechanics — dedup, price
+    math, scoring gates, posting. This REPLACES the backend's own scrape step
+    (_scrape_deals): the agent supplies data, code verifies and persists it.
+
+    `deals` may be a JSON string, a single deal dict, or a list of dicts.
+    Each deal accepts flexible (Hermes-friendly) field names:
+        title                          (required)
+        asin                           (required — affiliate URL, dedup, history)
+        price / deal_price             (required)
+        list_price / original_price    (optional)
+        discount / discount_pct        (optional — recomputed when prices exist)
+        image_url / image              (recommended — no-image deals get dropped)
+        url / source_url               (optional — affiliate URL rebuilt from ASIN)
+        rating / star_rating, review_count, category   (optional)
+
+    Discount is ALWAYS computed by code when both prices are present — the
+    agent's arithmetic is never trusted (agentic principle: code for mechanics).
+    save_deal() then enforces ASIN/URL/fuzzy-title dedup, image quality, the
+    tech-keyword filter, and the discount sanity cap. The downstream pipeline's
+    live price-verify gate is the final guard against bad agent data.
+
+    Returns a summary: total / saved / duplicate-or-filtered / invalid counts.
+    """
+    import re as _re
+    from src.amazon_scraper import _build_affiliate_url
+    from src.database import save_deal
+
+    if isinstance(deals, str):
+        try:
+            deals = json.loads(deals)
+        except (ValueError, TypeError) as exc:
+            return f"Ingest failed: deals payload is not valid JSON ({exc})"
+    if isinstance(deals, dict):
+        deals = [deals]  # tolerate a single-deal object
+    if not isinstance(deals, list):
+        return "Ingest failed: expected a JSON list of deal objects."
+
+    saved = filtered = invalid = 0
+
+    for raw in deals:
+        if not isinstance(raw, dict):
+            invalid += 1
+            continue
+
+        title = (raw.get("title") or "").strip()
+        asin = (raw.get("asin") or "").strip().upper()
+
+        # Required trio: without these a deal can't be scored, deduped, or linked.
+        deal_price = raw.get("deal_price", raw.get("price"))
+        try:
+            deal_price = float(deal_price) if deal_price is not None else None
+        except (ValueError, TypeError):
+            deal_price = None
+        if not title or not asin or not deal_price or deal_price <= 0:
+            invalid += 1
+            continue
+
+        # Optional list price.
+        original_price = raw.get("original_price", raw.get("list_price"))
+        try:
+            original_price = float(original_price) if original_price is not None else None
+        except (ValueError, TypeError):
+            original_price = None
+        if original_price is not None and original_price <= deal_price:
+            original_price = None  # nonsensical "discount" — discard
+
+        # Discount: compute from prices when possible (code does the math, not
+        # the agent). Only fall back to an agent-reported discount when there's
+        # no list price to compute from.
+        if original_price and original_price > deal_price:
+            discount_pct = round(((original_price - deal_price) / original_price) * 100, 2)
+        else:
+            try:
+                discount_pct = float(raw.get("discount", raw.get("discount_pct", 0)) or 0)
+            except (ValueError, TypeError):
+                discount_pct = 0.0
+
+        # Affiliate URL: always rebuilt from ASIN so the affiliate tag is
+        # guaranteed present (revenue), regardless of the URL Hermes passes.
+        href = raw.get("source_url", raw.get("url", "")) or ""
+        source_url, affiliate_url = _build_affiliate_url(href, asin)
+
+        # Image (optional input; save_deal drops deals without a real image).
+        image_url = raw.get("image_url", raw.get("image"))
+        if image_url and "._" in image_url:
+            image_url = _re.sub(r'\._[^.]+\.', '._AC_SL500_.', image_url)
+
+        # Rating / reviews (optional).
+        rating_raw = raw.get("star_rating", raw.get("rating"))
+        try:
+            star_rating = float(rating_raw) if rating_raw is not None else None
+        except (ValueError, TypeError):
+            star_rating = None
+        try:
+            review_count = int(raw["review_count"]) if raw.get("review_count") is not None else None
+        except (ValueError, TypeError):
+            review_count = None
+
+        deal = {
+            "title": title[:500],
+            "asin": asin,
+            "original_price": original_price,
+            "deal_price": deal_price,
+            "discount_pct": discount_pct,
+            "retailer": "Amazon",
+            "source_url": source_url,
+            "affiliate_url": affiliate_url,
+            "image_url": image_url,
+            "coupon_code": raw.get("coupon_code"),
+            "extra_savings": raw.get("extra_savings"),
+            "category": (raw.get("category") or "tech"),
+            "star_rating": star_rating,
+            "review_count": review_count,
+            "source": raw.get("source", "hermes"),
+        }
+
+        try:
+            if save_deal(deal):
+                saved += 1
+            else:
+                filtered += 1
+        except Exception as exc:
+            invalid += 1
+            print(f"  [ingest] save_deal error for '{title[:40]}': {exc}")
+
+    return (f"Ingested {len(deals)} deal(s): {saved} saved, "
+            f"{filtered} duplicate/filtered, {invalid} invalid.")
 
 
 def _generate_and_send_cards(limit: int = 5) -> str:
