@@ -1,0 +1,102 @@
+services:
+  postiz:
+    image: ghcr.io/gitroomhq/postiz-app:latest
+    container_name: postiz
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://postiz-user:CHANGEME_PG_PASSWORD@postiz-postgres:5432/postiz-db-local
+      - REDIS_URL=redis://postiz-redis:6379
+      - JWT_SECRET=CHANGEME_JWT_SECRET
+      - FRONTEND_URL=https://srv1706813.hstgr.cloud
+      - NEXT_PUBLIC_BACKEND_URL=https://srv1706813.hstgr.cloud/api
+      - BACKEND_INTERNAL_URL=http://localhost:5000
+      - MAIN_URL=https://srv1706813.hstgr.cloud
+      - TEMPORAL_ADDRESS=temporal:7233
+      - NOT_SECURED=true
+      - X_API_KEY=CHANGEME_X_API_KEY
+      - X_API_SECRET=CHANGEME_X_API_SECRET
+      - X_URL=https://srv1706813.hstgr.cloud
+    ports:
+      - '4007:5000'
+    depends_on:
+      postiz-postgres:
+        condition: service_started
+      postiz-redis:
+        condition: service_started
+    networks:
+      - postiz-network
+
+  postiz-postgres:
+    image: postgres:15
+    container_name: postiz-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postiz-user
+      - POSTGRES_PASSWORD=CHANGEME_PG_PASSWORD
+    networks:
+      - postiz-network
+
+  postiz-redis:
+    image: redis:7-alpine
+    container_name: postiz-redis
+    restart: unless-stopped
+    networks:
+      - postiz-network
+
+  temporal-postgresql:
+    container_name: temporal-postgresql
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=CHANGEME_PG_PASSWORD
+    networks:
+      - postiz-network
+    volumes:
+      - temporal-pgdata:/var/lib/postgresql/data
+
+  temporal-elasticsearch:
+    container_name: temporal-elasticsearch
+    image: elasticsearch:7.17.27
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.routing.allocation.disk.threshold_enabled=false
+    networks:
+      - postiz-network
+    expose:
+      - "9200"
+    volumes:
+      - temporal-esdata:/usr/share/elasticsearch/data
+
+  temporal:
+    container_name: temporal
+    image: temporalio/auto-setup:1.28.1
+    restart: unless-stopped
+    depends_on:
+      - temporal-postgresql
+      - temporal-elasticsearch
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgresql
+      - ENABLE_ES=true
+      - ES_SEEDS=temporal-elasticsearch
+      - ES_VERSION=v7
+    networks:
+      - postiz-network
+    expose:
+      - "7233"
+
+networks:
+  postiz-network:
+    driver: bridge
+
+volumes:
+  temporal-pgdata:
+  temporal-esdata:
+

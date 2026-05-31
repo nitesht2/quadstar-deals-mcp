@@ -1,0 +1,15 @@
+[Unit]
+Description=QuadStar Deals FastAPI backend (deal pipeline + Discord approval bot)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/quadstar-deals
+ExecStart=/opt/quadstar-deals/venv/bin/uvicorn src.api:app --host 127.0.0.1 --port 8001
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

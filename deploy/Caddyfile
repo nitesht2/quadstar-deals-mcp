@@ -1,0 +1,3 @@
+srv1706813.hstgr.cloud {
+    reverse_proxy localhost:4007
+}
