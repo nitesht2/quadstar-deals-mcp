@@ -414,6 +414,39 @@ async def debug_run_pipeline():
     return {"result": result}
 
 
+@app.post("/tools/{tool}")
+async def call_tool(tool: str, request: Request):
+    """Run a bot-loop / posting-dependent tool IN THIS process (where the Discord
+    bot's event loop lives). The MCP server delegates these here so that tools like
+    generate_and_send_cards actually reach Discord — the MCP server runs in its own
+    process and has no bot loop. Body carries typed args, e.g. {"limit": 3}.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    from src import agent as _a
+    tools = {
+        "generate_and_send_cards": lambda: _a._generate_and_send_cards(int(body.get("limit", 5))),
+        "run_pipeline":            lambda: _a._run_pipeline(int(body.get("limit", 10))),
+        "schedule_to_postiz":      lambda: _a._schedule_to_postiz(
+                                       int(body.get("deal_id", 0) or 0),
+                                       str(body.get("platforms", "")),
+                                       bool(body.get("ab_test", False))),
+        "post_to_telegram":        lambda: _a._post_to_telegram(int(body.get("deal_id", 0) or 0)),
+        "check_price_drops":       lambda: _a._check_price_drops(),
+    }
+    fn = tools.get(tool)
+    if not fn:
+        return {"error": f"unknown tool '{tool}'"}
+    loop = asyncio.get_running_loop()
+    try:
+        result = await loop.run_in_executor(None, fn)
+        return {"result": result}
+    except Exception as exc:
+        return {"error": f"tool '{tool}' failed: {exc}"}
+
+
 @app.get("/status")
 async def pipeline_status():
     """Pipeline health dashboard — deals scraped/posted/skipped today, source weights, score distribution."""

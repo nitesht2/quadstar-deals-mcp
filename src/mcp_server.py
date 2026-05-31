@@ -17,11 +17,30 @@ which holds the real business logic (reused verbatim by tool_router.dispatch).
 Run standalone (stdio transport):  python -m src.mcp_server
 Register in Hermes config as an MCP server pointing at that command.
 """
+import os
+
+import requests
 from mcp.server.fastmcp import FastMCP
 
 from src import agent
 
 mcp = FastMCP("quadstar-deals")
+
+# The MCP server runs in its OWN process (spawned per call) and has no Discord
+# bot loop — that lives only in the long-running FastAPI service. Tools that need
+# the bot loop (approval cards) or that perform posting are delegated to the
+# service over HTTP so they execute where the bot + scheduler actually run.
+_SERVICE_URL = os.getenv("QUADSTAR_SERVICE_URL", "http://127.0.0.1:8001")
+
+
+def _via_service(tool: str, **args) -> str:
+    """Delegate a bot-loop/posting-dependent tool to the running FastAPI service."""
+    try:
+        r = requests.post(f"{_SERVICE_URL}/tools/{tool}", json=args, timeout=180)
+        data = r.json()
+        return data.get("result") or data.get("error") or str(data)
+    except Exception as exc:
+        return f"Service call '{tool}' failed: {exc} (is the quadstar-deals service up on :8001?)"
 
 
 # ── Deal intake (the Phase-3 ingest loop) ──────────────────────────────────────
@@ -57,7 +76,7 @@ def run_pipeline(limit: int = 10) -> str:
     content confidence >= threshold, live Amazon price re-verify, ASIN cooldown.
     Idempotent: ASIN dedup + daily cap mean a retry never double-posts. Returns
     a summary, or an empty string when nothing qualified (stay silent)."""
-    return agent._run_pipeline(limit)
+    return _via_service("run_pipeline", limit=limit)
 
 
 @mcp.tool()
@@ -70,20 +89,20 @@ def get_unposted_deals(limit: int = 5) -> str:
 def generate_and_send_cards(limit: int = 5) -> str:
     """Generate tweet content for top unposted deals and send Discord approval
     cards (the human gate). Returns how many cards were sent."""
-    return agent._generate_and_send_cards(limit)
+    return _via_service("generate_and_send_cards", limit=limit)
 
 
 @mcp.tool()
 def schedule_to_postiz(deal_id: int, platforms: str = "", ab_test: bool = False) -> str:
     """Schedule an approved deal to social platforms via Postiz. platforms is a
     comma-separated list (empty = auto-route). ab_test=True posts two variants."""
-    return agent._schedule_to_postiz(deal_id, platforms, ab_test)
+    return _via_service("schedule_to_postiz", deal_id=deal_id, platforms=platforms, ab_test=ab_test)
 
 
 @mcp.tool()
 def post_to_telegram(deal_id: int) -> str:
     """Post a deal directly to Telegram, bypassing Postiz (side-channel)."""
-    return agent._post_to_telegram(deal_id)
+    return _via_service("post_to_telegram", deal_id=deal_id)
 
 
 # ── Learning loop (call these FIRST each tick) ─────────────────────────────────
@@ -111,7 +130,7 @@ def analyze_tweet_performance() -> str:
 @mcp.tool()
 def check_price_drops() -> str:
     """Check watchlist ASINs for price drops; queue eligible auto-reposts."""
-    return agent._check_price_drops()
+    return _via_service("check_price_drops")
 
 
 @mcp.tool()
