@@ -168,4 +168,4 @@ def test_counts_saved_filtered_and_invalid():
     with patch("src.database.save_deal", side_effect=_fake):
         from src.agent import _ingest_deals
         out = _ingest_deals(payload)
-    assert "3 deal(s): 1 saved, 1 duplicate/filtered, 1 invalid" in out
+    assert "3 deal(s): 1 saved, 0 copy-updated, 1 duplicate/filtered, 1 invalid" in out

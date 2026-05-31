@@ -120,7 +120,7 @@ def _ingest_deals(deals) -> str:
     if not isinstance(deals, list):
         return "Ingest failed: expected a JSON list of deal objects."
 
-    saved = filtered = invalid = 0
+    saved = filtered = invalid = updated = 0
 
     for raw in deals:
         if not isinstance(raw, dict):
@@ -210,6 +210,25 @@ def _ingest_deals(deals) -> str:
             deal["hermes_linkedin"] = (raw.get("linkedin_post") or "").strip()
             deal["copy_source"] = "hermes"
 
+        # Lean-split bridge: if the backend already scraped this ASIN, attach
+        # Hermes's copy to that existing un-posted deal (don't dup-filter it).
+        if t1 and asin:
+            from src.database import _load_deals, update_deal
+            existing = next(
+                (d for d in _load_deals()
+                 if d.get("asin") == asin and d.get("is_active") and not d.get("is_posted")),
+                None,
+            )
+            if existing:
+                update_deal(existing["id"], {
+                    "hermes_tweet_1": deal["hermes_tweet_1"],
+                    "hermes_tweet_2": deal["hermes_tweet_2"],
+                    "hermes_linkedin": deal["hermes_linkedin"],
+                    "copy_source": "hermes",
+                })
+                updated += 1
+                continue
+
         try:
             if save_deal(deal):
                 saved += 1
@@ -219,7 +238,7 @@ def _ingest_deals(deals) -> str:
             invalid += 1
             print(f"  [ingest] save_deal error for '{title[:40]}': {exc}")
 
-    return (f"Ingested {len(deals)} deal(s): {saved} saved, "
+    return (f"Ingested {len(deals)} deal(s): {saved} saved, {updated} copy-updated, "
             f"{filtered} duplicate/filtered, {invalid} invalid.")
 
 
@@ -266,8 +285,12 @@ def _get_unposted_deals(limit: int = 5) -> str:
     return json.dumps([
         {
             "id": d["id"],
-            "title": d["title"][:80],
+            "asin": d.get("asin", ""),
+            "title": d["title"][:120],
+            "deal_price": d.get("deal_price"),
+            "original_price": d.get("original_price"),
             "discount_pct": d.get("discount_pct", 0),
+            "star_rating": d.get("star_rating"),
             "category": d.get("category", "tech"),
         }
         for d in deals
