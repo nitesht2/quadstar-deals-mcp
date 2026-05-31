@@ -1,0 +1,260 @@
+# QuadStar Deals — Reply Target Accounts
+#
+# Tier 1: High-value tech reviewers + large deal-adjacent audiences
+# Tier 2: Deal/savings focused, price-conscious audiences
+# Tier 3: Supporting tech coverage
+#
+# topic_filters: tweets must match allowed_topics (if set) and not match blocked_topics
+# lookback_hours: how far back to search (should match run frequency = 0.5h)
+
+lookback_hours: 0.5
+max_cards_per_run: 5
+max_results_per_user: 10
+
+tiers:
+  Tier 1:
+    - username: MKBHD
+      display: "Marques Brownlee"
+      topic_filters:
+        allowed_topics:
+          - review
+          - tested
+          - deal
+          - discount
+          - price
+          - buy
+          - worth
+          - headphone
+          - laptop
+          - phone
+          - camera
+          - monitor
+          - earbuds
+          - charging
+          - battery
+          - storage
+        blocked_topics:
+          - politics
+          - election
+          - vote
+
+    - username: LinusTech
+      display: "Linus Tech Tips"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - price
+          - review
+          - build
+          - PC
+          - GPU
+          - CPU
+          - ram
+          - SSD
+          - monitor
+          - keyboard
+          - headset
+          - laptop
+          - budget
+
+    - username: Dave2D
+      display: "Dave2D"
+      topic_filters:
+        allowed_topics:
+          - laptop
+          - review
+          - deal
+          - price
+          - budget
+          - value
+          - macbook
+          - windows
+          - gaming
+
+    - username: RTings
+      display: "Rtings"
+      topic_filters:
+        allowed_topics:
+          - review
+          - best
+          - budget
+          - value
+          - TV
+          - monitor
+          - headphone
+          - soundbar
+          - speaker
+
+    - username: wirecutter
+      display: "Wirecutter"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - pick
+          - best
+          - buy
+          - review
+          - recommend
+
+  Tier 2:
+    - username: slickdeals
+      display: "Slickdeals"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - Amazon
+          - "off"
+          - price
+          - electronics
+          - tech
+          - laptop
+          - TV
+
+    - username: dealnews
+      display: "DealNews"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - Amazon
+          - tech
+          - electronics
+          - price
+
+    - username: TechRadar
+      display: "TechRadar"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - best
+          - budget
+          - review
+          - price
+          - buy
+
+    - username: verge
+      display: "The Verge"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - price
+          - review
+          - best
+          - buy
+          - Amazon
+        blocked_topics:
+          - politics
+          - election
+          - policy
+          - regulation
+
+    - username: TomsGuide
+      display: "Tom's Guide"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - best
+          - budget
+          - review
+          - price
+          - buy
+          - laptop
+          - headphone
+          - TV
+          - phone
+
+    - username: 9to5Mac
+      display: "9to5Mac"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - price
+          - Amazon
+          - Apple
+          - MacBook
+          - iPad
+          - AirPods
+          - iPhone
+
+  Tier 3:
+    - username: AndroidAuthority
+      display: "Android Authority"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - price
+          - budget
+          - best
+          - buy
+          - review
+          - Android
+          - phone
+          - tablet
+
+    - username: notebookcheck
+      display: "NotebookCheck"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - price
+          - review
+          - laptop
+          - budget
+          - value
+          - sale
+
+    - username: PCMag
+      display: "PCMag"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - best
+          - budget
+          - review
+          - price
+          - buy
+
+    - username: engadget
+      display: "Engadget"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - price
+          - review
+          - best
+          - buy
+        blocked_topics:
+          - politics
+          - policy
+
+    - username: BradsMDeals
+      display: "Brad's Deals"
+      topic_filters:
+        allowed_topics:
+          - deal
+          - sale
+          - discount
+          - Amazon
+          - tech
+          - electronics
+          - price
+          - "off"

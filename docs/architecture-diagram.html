@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuadStar Deals - Architecture & Workflow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #e0e0e0; padding: 40px 20px; line-height: 1.6; }
+  h1 { text-align: center; font-size: 2rem; margin-bottom: 6px; color: #fff; }
+  .subtitle { text-align: center; color: #888; margin-bottom: 40px; font-size: 0.95rem; }
+  .section-title { font-size: 1.3rem; color: #00ff88; margin: 40px auto 20px; padding-left: 12px; border-left: 3px solid #00ff88; max-width: 900px; }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  /* Architecture */
+  .arch { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 20px; }
+  .arch-row { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .arrow { color: #444; font-size: 1.4rem; }
+  .node { padding: 12px 18px; border-radius: 8px; text-align: center; min-width: 160px; }
+  .node .label { font-weight: 600; font-size: 0.85rem; }
+  .node .detail { font-size: 0.72rem; color: #aaa; margin-top: 3px; }
+  .node.you { background: linear-gradient(135deg, #1a1a3e, #2e1a3e); border: 2px solid #c084fc; }
+  .node.you .label { color: #c084fc; }
+  .node.discord { background: #5865f2; color: #fff; }
+  .node.discord .detail { color: #c5c9ff; }
+  .node.openclaw { background: #1a1a2e; border: 2px solid #e94560; }
+  .node.openclaw .label { color: #e94560; }
+  .node.agent { background: #1a2e1a; border: 2px solid #00ff88; }
+  .node.agent .label { color: #00ff88; }
+  .node.ollama { background: #2e2e1a; border: 2px solid #fbbf24; }
+  .node.ollama .label { color: #fbbf24; }
+  .node.postiz { background: #1a1a2e; border: 2px solid #a855f7; }
+  .node.postiz .label { color: #a855f7; }
+  .node.social { background: #0f172a; border: 2px solid #38bdf8; }
+  .node.social .label { color: #38bdf8; }
+  .node.amazon { background: #1a2e2e; border: 2px solid #06b6d4; }
+  .node.amazon .label { color: #06b6d4; }
+
+  /* Workflow Steps */
+  .steps { max-width: 700px; margin: 0 auto; }
+  .step { display: flex; gap: 14px; }
+  .step-line { display: flex; flex-direction: column; align-items: center; }
+  .step-num { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0; color: #000; }
+  .step-tail { width: 2px; flex: 1; background: #222; min-height: 20px; }
+  .step:last-child .step-tail { background: transparent; }
+  .step-body { padding-bottom: 20px; }
+  .step-body h4 { font-size: 0.9rem; margin-bottom: 3px; }
+  .step-body p { font-size: 0.8rem; color: #999; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.68rem; font-weight: 600; margin-top: 6px; margin-right: 4px; }
+  .tag.auto { background: #1a2e1a; color: #00ff88; }
+  .tag.human { background: #2e2e1a; color: #fbbf24; }
+  .tag.ai { background: #1a1a2e; color: #a855f7; }
+
+  /* Data Flows */
+  .flow { margin: 12px 0; }
+  .flow-label { font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+  .flow-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+  .flow-node { padding: 5px 10px; border-radius: 5px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; }
+  .flow-arrow { color: #555; font-size: 0.9rem; }
+  .fn-trigger { background: #2e1a1a; color: #f97316; border: 1px solid #f97316; }
+  .fn-process { background: #1a2e1a; color: #00ff88; border: 1px solid #00ff88; }
+  .fn-decision { background: #2e2e1a; color: #fbbf24; border: 1px solid #fbbf24; }
+  .fn-output { background: #1a1a2e; color: #a855f7; border: 1px solid #a855f7; }
+  .fn-external { background: #0f172a; color: #38bdf8; border: 1px solid #38bdf8; }
+
+  /* Assessment */
+  .assess-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .assess-card { background: #111; border-radius: 8px; padding: 16px; border: 1px solid #222; }
+  .assess-card h3 { font-size: 0.95rem; margin-bottom: 10px; }
+  .assess-card.good h3 { color: #00ff88; }
+  .assess-card.manual h3 { color: #fbbf24; }
+  .assess-card ul { list-style: none; }
+  .assess-card li { padding: 5px 0; font-size: 0.8rem; border-bottom: 1px solid #1a1a1a; }
+  .assess-card li:last-child { border: none; }
+
+  .score-bar { background: #1a1a1a; border-radius: 16px; height: 36px; position: relative; overflow: hidden; margin: 16px 0 8px; max-width: 500px; margin-left: auto; margin-right: auto; }
+  .score-fill { height: 100%; border-radius: 16px; display: flex; align-items: center; justify-content: flex-end; padding-right: 14px; font-weight: 700; font-size: 1rem; background: linear-gradient(90deg, #00ff88, #22c55e); color: #000; }
+  .score-labels { display: flex; justify-content: space-between; font-size: 0.7rem; color: #666; max-width: 500px; margin: 0 auto 8px; }
+  .score-note { text-align: center; font-size: 0.8rem; color: #888; }
+
+  .info-box { background: #111; border-radius: 8px; padding: 16px; border: 1px solid #222; margin: 16px 0; }
+  .info-box h3 { font-size: 0.95rem; margin-bottom: 10px; }
+  .info-box p, .info-box li { font-size: 0.82rem; color: #999; }
+  .info-box ul { list-style: none; padding: 0; }
+  .info-box li { padding: 3px 0; }
+
+  @media (max-width: 700px) { .assess-grid { grid-template-columns: 1fr; } .arch-row { flex-direction: column; align-items: center; } }
+</style>
+</head>
+<body>
+
+<h1>QuadStar Deals Pipeline</h1>
+<p class="subtitle">Agentic Multi-Platform Deal Posting System</p>
+
+<!-- ─── ARCHITECTURE ─── -->
+<h2 class="section-title">System Architecture</h2>
+<div class="container">
+<div class="arch">
+  <div class="arch-row">
+    <div class="node you"><div class="label">You (Discord)</div><div class="detail">@mention agents or click buttons</div></div>
+  </div>
+  <div class="arrow">&#8595;</div>
+  <div class="arch-row">
+    <div class="node openclaw"><div class="label">QuadStar Deals Agent</div><div class="detail">OpenClaw / qwen3.5:9b / cron 3h</div></div>
+    <div class="node openclaw"><div class="label">QuadStar Schedule & Analytics</div><div class="detail">OpenClaw / qwen3.5:9b / cron daily 9am</div></div>
+    <div class="node discord"><div class="label">QuadstarDeals#3389</div><div class="detail">discord.py / buttons only</div></div>
+  </div>
+  <div class="arrow">&#8595; curl POST &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &#8595; curl POST &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &#8595; button callback</div>
+  <div class="arch-row">
+    <div class="node agent" style="min-width: 380px;"><div class="label">FastAPI + LangGraph ReAct Agent (port 8001)</div><div class="detail">7 tools: scrape, cards, schedule, feedback, status, categories</div></div>
+  </div>
+  <div class="arrow">&#8595;</div>
+  <div class="arch-row">
+    <div class="node ollama"><div class="label">Ollama qwen3.5:4b</div><div class="detail">Tool-calling + tweet gen / $0</div></div>
+    <div class="node amazon"><div class="label">Amazon</div><div class="detail">Scrapling + Playwright</div></div>
+    <div class="node postiz"><div class="label">Postiz (port 4007)</div><div class="detail">Self-hosted scheduler</div></div>
+  </div>
+  <div class="arrow">&#8595;</div>
+  <div class="arch-row">
+    <div class="node social"><div class="label">@quadstardeals</div><div class="detail">X/Twitter (two-post format)</div></div>
+  </div>
+</div>
+</div>
+
+<!-- ─── WORKFLOW ─── -->
+<h2 class="section-title">End-to-End Workflow</h2>
+<div class="steps">
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:#06b6d4;">1</div><div class="step-tail"></div></div>
+    <div class="step-body">
+      <h4>Trigger</h4>
+      <p>OpenClaw cron fires every 3 hours, OR you type <code>@QuadStar Deals Agent scrape tech deals</code> in Discord.</p>
+      <span class="tag auto">Automatic (cron)</span><span class="tag human">Manual (@mention)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:#00ff88;">2</div><div class="step-tail"></div></div>
+    <div class="step-body">
+      <h4>Agent Decides</h4>
+      <p>LangGraph ReAct agent receives the command. It autonomously plans which tools to call and in what order based on the natural language input.</p>
+      <span class="tag ai">Agentic (AI decides)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:#a855f7;color:#fff;">3</div><div class="step-tail"></div></div>
+    <div class="step-body">
+      <h4>Scrape + Filter</h4>
+      <p>Scrapling fetches Amazon deal pages with stealth headers. Playwright renders JS as fallback. Deals filtered by tech keywords, $50+ price, 15%+ discount, 24h freshness.</p>
+      <span class="tag auto">Automatic</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:#5865f2;color:#fff;">4</div><div class="step-tail"></div></div>
+    <div class="step-body">
+      <h4>Generate + Send Cards</h4>
+      <p>Ollama generates unique tweet content per deal. Multi-message cards sent to Discord: Tweet 1, product image, Tweet 2 with affiliate link, and action buttons.</p>
+      <span class="tag ai">Agentic (LLM generates)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:#fbbf24;">5</div><div class="step-tail"></div></div>
+    <div class="step-body">
+      <h4>Human Review</h4>
+      <p>You review deal cards in Discord (phone or desktop). Click Approve, Regenerate, Skip, or Reject. This is the only human-in-the-loop step.</p>
+      <span class="tag human">Human Decision</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:#e94560;color:#fff;">6</div><div class="step-tail"></div></div>
+    <div class="step-body">
+      <h4>Schedule to Postiz</h4>
+      <p>Approve triggers the agent, which calls schedule_to_postiz(). Two posts scheduled: Tweet 1 at optimal time (8am/12pm/5pm ET), Tweet 2 as reply 2 minutes later.</p>
+      <span class="tag ai">Agentic (agent schedules)</span>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-line"><div class="step-num" style="background:#38bdf8;">7</div><div class="step-tail"></div></div>
+    <div class="step-body">
+      <h4>Post to @quadstardeals</h4>
+      <p>Postiz publishes at the scheduled time. Tweet 1 goes out with no link (avoids reach penalty). Tweet 2 replies with the affiliate link 2 minutes later.</p>
+      <span class="tag auto">Automatic (Postiz)</span>
+    </div>
+  </div>
+</div>
+
+<!-- ─── DATA FLOWS ─── -->
+<h2 class="section-title">Data Flow Paths</h2>
+<div class="container">
+  <div class="flow">
+    <div class="flow-label" style="color:#00ff88;">Deal Flow (every 3h or on demand)</div>
+    <div class="flow-row">
+      <div class="flow-node fn-trigger">Cron / @mention</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">OpenClaw Agent</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">FastAPI</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">LangGraph Agent</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-external">Amazon Scrape</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-output">Discord Cards</div>
+    </div>
+  </div>
+  <div class="flow">
+    <div class="flow-label" style="color:#fbbf24;">Approval Flow (human triggered)</div>
+    <div class="flow-row">
+      <div class="flow-node fn-decision">Click Approve</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">discord.py</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">LangGraph Agent</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-output">Postiz API</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-external">@quadstardeals</div>
+    </div>
+  </div>
+  <div class="flow">
+    <div class="flow-label" style="color:#a855f7;">Learning Flow (daily 9am)</div>
+    <div class="flow-row">
+      <div class="flow-node fn-trigger">Daily Cron</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">Analytics Agent</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">read_feedback()</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-output">preferences.json</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">Better deal ranking</div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── AGENTIC ASSESSMENT ─── -->
+<h2 class="section-title">Is This Process Fully Agentic?</h2>
+<div class="container">
+  <div class="score-bar"><div class="score-fill" style="width:82%;">82%</div></div>
+  <div class="score-labels"><span>Manual</span><span>Semi-Agentic</span><span>Fully Agentic</span></div>
+  <p class="score-note">Human-in-the-loop by design, not by limitation. The one manual step (Approve) is intentional.</p>
+
+  <div class="assess-grid">
+    <div class="assess-card good">
+      <h3>Agentic (AI Decides)</h3>
+      <ul>
+        <li>&#x2705; Agent autonomously plans tool call sequences from natural language</li>
+        <li>&#x2705; Ollama generates unique tweet content per deal (no templates)</li>
+        <li>&#x2705; Agent picks optimal posting time (8am/12pm/5pm ET)</li>
+        <li>&#x2705; Feedback loop learns preferences from reactions/comments</li>
+        <li>&#x2705; OpenClaw agents interpret natural language and route to API</li>
+        <li>&#x2705; Cron triggers run autonomously (3h deals, daily analytics)</li>
+        <li>&#x2705; Categories addable via natural language command</li>
+        <li>&#x2705; Deal ranking improves over time from feedback data</li>
+      </ul>
+    </div>
+    <div class="assess-card manual">
+      <h3>Human-in-the-Loop (Intentional)</h3>
+      <ul>
+        <li>&#x1F7E1; Approve/Reject buttons require your click (by design)</li>
+        <li>&#x1F7E1; You can @mention agents for ad-hoc commands</li>
+        <li>&#x1F7E1; Postiz social accounts connected manually (one-time)</li>
+        <li>&#x1F7E1; Discord bot tokens created manually (one-time)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <h3 style="color:#00ff88;">Why 82% and not 100%?</h3>
+    <p>The Approve button is the only non-agentic step, and it's intentional. You don't want an AI deciding what gets posted to your social media accounts with your affiliate links. That's a business decision, not an automation gap.</p>
+    <p style="margin-top:8px;">To make it 100% agentic, remove the Approve step and let the agent post directly. The code supports this. But that's a trust decision, not a technical one.</p>
+  </div>
+
+  <div class="info-box">
+    <h3 style="color:#fbbf24;">What Would Make It More Agentic?</h3>
+    <ul>
+      <li>&#x2022; <strong>Auto-approve high-confidence deals</strong> -- if discount > 40% and feedback score > 80, skip approval</li>
+      <li>&#x2022; <strong>Multi-platform expansion</strong> -- agent decides which platforms per deal (LinkedIn for B2B, TikTok for consumer)</li>
+      <li>&#x2022; <strong>A/B test tweets</strong> -- agent generates 2 versions, posts both, learns which performs better</li>
+      <li>&#x2022; <strong>Price monitoring</strong> -- agent watches prices and auto-scrapes when drops detected</li>
+      <li>&#x2022; <strong>Hermes learning loop</strong> -- agent writes its own skills from experience</li>
+    </ul>
+  </div>
+</div>
+
+<p style="text-align:center; color:#333; margin-top:40px; font-size:0.75rem;">QuadStar Deals Pipeline v2.0 | $0/month | Built with Claude Code</p>
+
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuadStar Deals — Pipeline Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#020617;color:#e2e8f0;font-family:'JetBrains Mono',monospace;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:40px 20px}
+.header{text-align:center;margin-bottom:32px;width:100%;max-width:1200px}
+.header h1{font-size:24px;font-weight:700;color:#f1f5f9}
+.header .subtitle{font-size:12px;color:#64748b;margin-top:6px}
+.header .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#34d399;animation:pulse 2s infinite;margin-right:8px;vertical-align:middle}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.diagram-card{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:32px;width:100%;max-width:1200px;overflow-x:auto}
+.diagram-card svg{display:block;margin:0 auto}
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%;max-width:1200px;margin-top:24px}
+.card{background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:16px}
+.card-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.card-dot{width:8px;height:8px;border-radius:50%}
+.card-dot.cyan{background:#22d3ee}
+.card-dot.emerald{background:#34d399}
+.card-dot.violet{background:#a78bfa}
+.card h3{font-size:11px;font-weight:600;color:#f1f5f9}
+.card ul{list-style:none;padding:0}
+.card li{font-size:9px;color:#94a3b8;padding:3px 0;line-height:1.5}
+.footer{text-align:center;margin-top:24px;font-size:9px;color:#475569}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span class="dot"></span>QuadStar Deals</h1>
+  <div class="subtitle">Automated Tech Deal Pipeline  ·  DeepSeek V4 Flash  ·  4 Posts/Day</div>
+</div>
+
+<div class="diagram-card">
+<svg viewBox="0 0 1100 820" width="1100" height="820">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-cyan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-emerald" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#fb923c"/>
+    </marker>
+    <marker id="arrow-dashed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#fb7185"/>
+    </marker>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="820" fill="url(#grid)"/>
+
+  <!-- ===== SCHEDULER LAYER ===== -->
+  <rect x="350" y="20" width="400" height="80" rx="8" fill="rgba(8,51,68,0.3)" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="550" y="44" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600">SCHEDULER</text>
+  <text x="550" y="60" text-anchor="middle" fill="#64748b" font-size="8">APScheduler · launchd</text>
+  <text x="550" y="74" text-anchor="middle" fill="#64748b" font-size="8">8am · 12pm · 5pm · 7pm PST (±30min jitter)</text>
+  <text x="550" y="88" text-anchor="middle" fill="#334155" font-size="7">max 4 runs/day · randomized timing</text>
+
+  <!-- Arrow: Scheduler → Pipeline -->
+  <line x1="550" y1="100" x2="550" y2="140" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+
+  <!-- ===== PIPELINE BOX ===== -->
+  <rect x="170" y="145" width="760" height="200" rx="10" fill="rgba(6,78,59,0.15)" stroke="#34d399" stroke-width="1" stroke-dasharray="6,3"/>
+  <text x="550" y="165" text-anchor="middle" fill="#34d399" font-size="10" font-weight="600">PIPELINE · agent.py</text>
+
+  <!-- Scraper -->
+  <rect x="200" y="180" width="160" height="60" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="280" y="204" text-anchor="middle" fill="#f1f5f9" font-size="11" font-weight="500">Scraper</text>
+  <text x="280" y="220" text-anchor="middle" fill="#64748b" font-size="8">Scrapling + Playwright</text>
+  <text x="280" y="232" text-anchor="middle" fill="#475569" font-size="7">Amazon · RSS · Aggregators</text>
+
+  <!-- Arrow: Scraper → Gates -->
+  <line x1="360" y1="210" x2="410" y2="210" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Gates (Stacked) -->
+  <rect x="415" y="178" width="170" height="64" rx="6" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="500" y="197" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="500">Score Gates</text>
+  <text x="500" y="212" text-anchor="middle" fill="#64748b" font-size="7">Discount ≥35% · Score ≥58</text>
+  <text x="500" y="224" text-anchor="middle" fill="#64748b" font-size="7">Confidence ≥0.85 · ASIN cooldown</text>
+  <text x="500" y="236" text-anchor="middle" fill="#475569" font-size="7">Live price verification</text>
+
+  <!-- Arrow: Gates → DeepSeek -->
+  <line x1="585" y1="210" x2="630" y2="210" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- DeepSeek LLM -->
+  <rect x="635" y="178" width="170" height="64" rx="6" fill="rgba(251,146,60,0.2)" stroke="#fb923c" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="720" y="197" text-anchor="middle" fill="#fb923c" font-size="10" font-weight="500">DeepSeek V4 Flash</text>
+  <text x="720" y="212" text-anchor="middle" fill="#64748b" font-size="7">api.deepseek.com</text>
+  <text x="720" y="224" text-anchor="middle" fill="#64748b" font-size="7">Tweet generation</text>
+  <text x="720" y="236" text-anchor="middle" fill="#475569" font-size="7">$0.0028/M cached input</text>
+
+  <!-- Arrow: DeepSeek → Brand Voice -->
+  <line x1="805" y1="210" x2="840" y2="210" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Brand Voice Filter -->
+  <rect x="845" y="180" width="60" height="56" rx="6" fill="rgba(136,19,55,0.3)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="875" y="202" text-anchor="middle" fill="#fb7185" font-size="8" font-weight="500">Brand</text>
+  <text x="875" y="214" text-anchor="middle" fill="#fb7185" font-size="8" font-weight="500">Voice</text>
+  <text x="875" y="228" text-anchor="middle" fill="#475569" font-size="7">~220 rules</text>
+
+  <!-- ===== FORMAT ROTATION ===== -->
+  <rect x="350" y="290" width="400" height="44" rx="20" fill="rgba(8,51,68,0.25)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="550" y="310" text-anchor="middle" fill="#22d3ee" font-size="9" font-weight="500">FORMAT ROTATION</text>
+  <text x="550" y="324" text-anchor="middle" fill="#64748b" font-size="8">~75% two-post thread · ~25% single tweet (randomized)</text>
+
+  <!-- Arrow: Pipeline → Format Rotation -->
+  <line x1="550" y1="270" x2="550" y2="288" stroke="#34d399" stroke-width="1" marker-end="url(#arrow-emerald)"/>
+
+  <!-- ===== POSTIZ ===== -->
+  <rect x="350" y="370" width="400" height="70" rx="8" fill="rgba(120,53,15,0.2)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="550" y="394" text-anchor="middle" fill="#fbbf24" font-size="11" font-weight="600">Postiz</text>
+  <text x="550" y="410" text-anchor="middle" fill="#64748b" font-size="8">localhost:4007 (Docker)</text>
+  <text x="550" y="424" text-anchor="middle" fill="#475569" font-size="7">Image upload · Scheduling · Multi-platform</text>
+
+  <!-- Arrow: Rotation → Postiz -->
+  <line x1="550" y1="334" x2="550" y2="368" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+  <!-- ===== X / TWITTER ===== -->
+  <rect x="400" y="480" width="300" height="60" rx="8" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="550" y="504" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">@quadstardeals</text>
+  <text x="550" y="520" text-anchor="middle" fill="#64748b" font-size="8">X / Twitter</text>
+  <text x="550" y="532" text-anchor="middle" fill="#475569" font-size="7">x.com/quadstardeals</text>
+
+  <!-- Arrow: Postiz → X -->
+  <line x1="550" y1="440" x2="550" y2="478" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ===== PRICE MONITOR ===== -->
+  <rect x="60" y="370" width="200" height="60" rx="6" fill="rgba(76,29,149,0.2)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="160" y="394" text-anchor="middle" fill="#a78bfa" font-size="9" font-weight="500">Price Monitor</text>
+  <text x="160" y="410" text-anchor="middle" fill="#64748b" font-size="8">Every 2h · 6am-6pm PST</text>
+  <text x="160" y="420" text-anchor="middle" fill="#475569" font-size="7">15-min auto-repost timer</text>
+
+  <!-- Arrow: Price Monitor → Postiz -->
+  <line x1="260" y1="400" x2="348" y2="405" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+
+  <!-- ===== DISCORD BOT ===== -->
+  <rect x="60" y="480" width="200" height="60" rx="6" fill="rgba(8,51,68,0.3)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="160" y="504" text-anchor="middle" fill="#22d3ee" font-size="9" font-weight="500">Discord Bot</text>
+  <text x="160" y="520" text-anchor="middle" fill="#64748b" font-size="8">QuadstarDeals#3389</text>
+  <text x="160" y="530" text-anchor="middle" fill="#475569" font-size="7">Auto-approve notifications</text>
+
+  <!-- Arrow: Price Monitor → Discord -->
+  <line x1="160" y1="430" x2="160" y2="478" stroke="#22d3ee" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow-cyan)"/>
+
+  <!-- ===== WATCHDOG ===== -->
+  <rect x="60" y="580" width="200" height="56" rx="6" fill="rgba(136,19,55,0.2)" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="160" y="603" text-anchor="middle" fill="#fb7185" font-size="9" font-weight="500">Postiz Watchdog</text>
+  <text x="160" y="618" text-anchor="middle" fill="#64748b" font-size="8">launchd · every 5 min</text>
+  <text x="160" y="628" text-anchor="middle" fill="#475569" font-size="7">Auto-restarts Docker + Postiz</text>
+
+  <!-- Arrow: Watchdog → Postiz (dashed) -->
+  <path d="M 260 608 L 348 608" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,3" fill="none" marker-end="url(#arrow-dashed)"/>
+
+  <!-- ===== COST & STATS BOX (bottom) ===== -->
+  <rect x="370" y="580" width="370" height="56" rx="6" fill="rgba(6,78,59,0.12)" stroke="#34d399" stroke-width="0.8" stroke-dasharray="3,2"/>
+  <text x="555" y="600" text-anchor="middle" fill="#34d399" font-size="9" font-weight="500">Monthly Cost: ~$0.10-0.30</text>
+  <text x="555" y="614" text-anchor="middle" fill="#64748b" font-size="8">4 posts/day · avg 12 words/post · All local except DeepSeek</text>
+  <text x="555" y="628" text-anchor="middle" fill="#475569" font-size="7">Context caching: $0.0028/1M input tokens on repeated system prompts</text>
+
+  <!-- ===== LEGEND ===== -->
+  <rect x="800" y="580" width="240" height="100" rx="6" fill="rgba(30,41,59,0.3)" stroke="#1e293b" stroke-width="1"/>
+  <text x="920" y="598" text-anchor="middle" fill="#e2e8f0" font-size="9" font-weight="600">LEGEND</text>
+  <rect x="815" y="606" width="10" height="10" rx="2" fill="rgba(8,51,68,0.5)" stroke="#22d3ee" stroke-width="1"/>
+  <text x="832" y="615" fill="#cbd5e1" font-size="8">Frontend / Scheduler</text>
+  <rect x="815" y="622" width="10" height="10" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+  <text x="832" y="631" fill="#cbd5e1" font-size="8">Backend / Pipeline</text>
+  <rect x="815" y="638" width="10" height="10" rx="2" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+  <text x="832" y="647" fill="#cbd5e1" font-size="8">LLM (DeepSeek)</text>
+  <rect x="815" y="654" width="10" height="10" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="832" y="663" fill="#cbd5e1" font-size="8">Scheduler (Postiz)</text>
+  <rect x="920" y="622" width="10" height="10" rx="2" fill="rgba(76,29,149,0.3)" stroke="#a78bfa" stroke-width="1"/>
+  <text x="937" y="631" fill="#cbd5e1" font-size="8">Database / Monitor</text>
+  <rect x="920" y="638" width="10" height="10" rx="2" fill="rgba(136,19,55,0.3)" stroke="#fb7185" stroke-width="1"/>
+  <text x="937" y="647" fill="#cbd5e1" font-size="8">Security / Watchdog</text>
+  <rect x="920" y="654" width="10" height="10" rx="2" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+  <text x="937" y="663" fill="#cbd5e1" font-size="8">External (X/Twitter)</text>
+
+</svg>
+</div>
+
+<!-- Info Cards -->
+<div class="info-grid">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot cyan"></div>
+      <h3>Pipeline Flow</h3>
+    </div>
+    <ul>
+      <li>• Scheduler fires at 4 peak PST times (±30min)</li>
+      <li>• Scraper fetches Amazon deals via Scrapling + Playwright</li>
+      <li>• 6 approval gates: discount, score, cooldown, confidence, price</li>
+      <li>• DeepSeek generates tweet copy with brand voice</li>
+      <li>• Format rotation: ~75% thread, ~25% single tweet</li>
+      <li>• Postiz schedules to X/Twitter</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot emerald"></div>
+      <h3>Anti-Detection</h3>
+    </div>
+    <ul>
+      <li>• Randomized posting times (jitter + shuffle)</li>
+      <li>• Random format (single vs thread)</li>
+      <li>• Brand voice: ~220 banned AI words</li>
+      <li>• Reply finder: disabled</li>
+      <li>• Max 4 posts/day</li>
+      <li>• Live price verification (no stale deals)</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-dot violet"></div>
+      <h3>Infrastructure</h3>
+    </div>
+    <ul>
+      <li>• DeepSeek API: $0.0028/M cached tokens</li>
+      <li>• Postiz: Docker, self-hosted, auto-heal</li>
+      <li>• FastAPI: port 8001 via launchd</li>
+      <li>• Postiz healthcheck: every 5 min</li>
+      <li>• All data: local JSON files</li>
+      <li>• Total cost: ~$0.10-0.30/month</li>
+    </ul>
+  </div>
+</div>
+
+<div class="footer">
+  github.com/nitesht2/quadstar-deals  ·  Updated May 2, 2026
+</div>
+
+</body>
+</html>

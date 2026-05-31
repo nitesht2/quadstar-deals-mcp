@@ -1,0 +1,165 @@
+# Tech profile — matches the current default behaviour of the pipeline.
+# When AGENT_PROFILE=tech (the default), this file's values override settings.py
+# defaults. Since values here match the hardcoded defaults exactly, behaviour
+# is identical to pre-profile pipeline.
+#
+# To replicate for a new niche: copy this file, rename to <niche>.yaml,
+# and change the values.
+
+brand_name: "QuadStar Deals"
+brand_hashtag: "#QuadStarDeals"
+affiliate_tag: "quadstar0e-20"
+
+# Aggregator sources (scraped via Firecrawl)
+deal_sources:
+  - name: "Slickdeals"
+    url: "https://slickdeals.net/deals/amazon/"
+    type: "aggregator"
+  - name: "DealNews"
+    url: "https://www.dealnews.com/s386/Amazon/"
+    type: "aggregator"
+  - name: "Camelcamelcamel"
+    url: "https://camelcamelcamel.com/top_drops/electronics"
+    type: "aggregator"
+
+# Brands scored as "tier 1" (premium)
+brand_tier_1:
+  - apple
+  - sony
+  - bose
+  - samsung
+  - lg
+  - dell
+  - hp
+  - lenovo
+  - asus
+  - microsoft
+  - google
+  - nvidia
+  - amd
+  - intel
+  - logitech
+  - razer
+  - corsair
+  - steelseries
+  - jbl
+  - sennheiser
+
+brand_tier_2:
+  - anker
+  - tp-link
+  - netgear
+  - western digital
+  - seagate
+  - crucial
+  - hyperx
+  - elgato
+  - shokz
+  - jabra
+  - philips
+  - epson
+  - brother
+  - roku
+  - amazon
+  - fire
+  - echo
+  - ring
+  - eufy
+  - roborock
+
+# Deal title must contain at least one of these keywords to qualify
+keywords:
+  # Computing
+  - laptop
+  - macbook
+  - chromebook
+  - notebook
+  - desktop
+  - pc
+  - imac
+  - monitor
+  - display
+  - gpu
+  - graphics card
+  - processor
+  - cpu
+  - ram
+  - ssd
+  - hard drive
+  - nvme
+  - motherboard
+  - keyboard
+  - mouse
+  - webcam
+  - router
+  - modem
+  - wifi
+  - mesh
+  # Mobile & Audio
+  - iphone
+  - ipad
+  - tablet
+  - samsung galaxy
+  - pixel
+  - smartphone
+  - airpods
+  - earbuds
+  - headphones
+  - speaker
+  - soundbar
+  # Gaming
+  - playstation
+  - ps5
+  - xbox
+  - nintendo
+  - switch
+  - gaming
+  - controller
+  - console
+  - steam deck
+  # Smart Home & Wearables
+  - apple watch
+  - smartwatch
+  - fitbit
+  - garmin
+  - ring doorbell
+  - echo
+  - alexa
+  - google nest
+  - smart home
+  - thermostat
+  - security camera
+  - robot vacuum
+  - roomba
+  # TVs & Streaming
+  - tv
+  - television
+  - oled
+  - qled
+  - 4k
+  - 8k
+  - projector
+  - fire stick
+  - roku
+  - chromecast
+  - apple tv
+  # Tech Accessories & Appliances
+  - charger
+  - power bank
+  - usb-c
+  - thunderbolt
+  - docking station
+  - printer
+  - scanner
+  - nas
+  - external drive
+  - flash drive
+  - drone
+  - camera
+  - gopro
+  - lens
+  - tripod
+  - 3d printer
+  - vr
+  - oculus
+  - meta quest

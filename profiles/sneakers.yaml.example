@@ -1,0 +1,82 @@
+# Sneakers profile — template for "QuadStar Sneakers Deals".
+# Rename to sneakers.yaml and set AGENT_PROFILE=sneakers to activate.
+#
+# Running: uvicorn src.api:app --port 8002 with AGENT_PROFILE=sneakers.
+# Use a dedicated .env (separate Discord bot, separate Telegram channel, etc.).
+
+brand_name: "QuadStar Sneakers"
+brand_hashtag: "#QuadStarSneakers"
+affiliate_tag: "quadstar-shoe-20"   # get a separate Amazon Associates tag
+
+# Aggregator sources that actually cover sneakers
+deal_sources:
+  - name: "Slickdeals Shoes"
+    url: "https://slickdeals.net/deals/shoes/"
+    type: "aggregator"
+  - name: "DealNews Shoes"
+    url: "https://www.dealnews.com/s330/Shoes/"
+    type: "aggregator"
+  # StockX/SNKRS require real-browser scraping — use browse_with_openclaw
+  # from the agent instead of adding them as Firecrawl sources
+
+brand_tier_1:
+  - nike
+  - jordan
+  - adidas
+  - new balance
+  - asics
+  - on running
+  - hoka
+  - salomon
+  - yeezy
+  - air jordan
+
+brand_tier_2:
+  - puma
+  - reebok
+  - under armour
+  - saucony
+  - brooks
+  - mizuno
+  - vans
+  - converse
+  - skechers
+  - merrell
+
+keywords:
+  # Core
+  - sneaker
+  - sneakers
+  - shoe
+  - shoes
+  - trainer
+  - trainers
+  - running shoe
+  - basketball shoe
+  - tennis shoe
+  # Iconic Lines
+  - air jordan
+  - air max
+  - air force
+  - dunk
+  - yeezy
+  - ultraboost
+  - boost
+  - stan smith
+  - superstar
+  - 550
+  - 990
+  - 2002r
+  # Activity
+  - running
+  - basketball
+  - cross training
+  - trail running
+  - hiking shoe
+  - lifestyle
+  # Materials / Features
+  - gore-tex
+  - mesh
+  - leather
+  - suede
+  - waterproof

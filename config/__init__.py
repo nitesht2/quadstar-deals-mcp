@@ -1,0 +1,1 @@
+# Quantdeal config package

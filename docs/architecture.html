@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuadStar Deals — Architecture</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080b11;
+    --surface: #0f1420;
+    --surface2: #151c2c;
+    --border: #1e2a42;
+    --green: #00e676;
+    --blue: #4fc3f7;
+    --purple: #ce93d8;
+    --orange: #ffb74d;
+    --red: #ef5350;
+    --yellow: #fff176;
+    --teal: #4dd0e1;
+    --discord: #5865f2;
+    --text: #cdd6f4;
+    --muted: #6b7a99;
+    --dim: #3d4a63;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 48px 24px 80px;
+    line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    margin-bottom: 64px;
+  }
+  header h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #fff;
+  }
+  header h1 span { color: var(--green); }
+  header p {
+    color: var(--muted);
+    margin-top: 8px;
+    font-size: 0.95rem;
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    margin: 0 4px;
+  }
+  .badge-green  { background: rgba(0,230,118,0.12); color: var(--green);  border: 1px solid rgba(0,230,118,0.25); }
+  .badge-blue   { background: rgba(79,195,247,0.12); color: var(--blue);  border: 1px solid rgba(79,195,247,0.25); }
+  .badge-purple { background: rgba(206,147,216,0.12); color: var(--purple); border: 1px solid rgba(206,147,216,0.25); }
+
+  /* ── Section titles ── */
+  .section-label {
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .section-heading {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .section-sub {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 32px;
+  }
+
+  /* ── Pipeline strip (main flow) ── */
+  .pipeline {
+    max-width: 1100px;
+    margin: 0 auto 72px;
+  }
+  .pipeline-row {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .pipe-node {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 16px;
+    min-width: 140px;
+    max-width: 160px;
+    flex: 1;
+    position: relative;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    cursor: default;
+  }
+  .pipe-node:hover {
+    box-shadow: 0 0 0 1px currentColor;
+  }
+  .pipe-node .step {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    opacity: 0.6;
+  }
+  .pipe-node .title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .pipe-node .file {
+    font-size: 0.68rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    opacity: 0.5;
+    margin-bottom: 6px;
+  }
+  .pipe-node .desc {
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  .pipe-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    color: var(--dim);
+    font-size: 1.3rem;
+    flex-shrink: 0;
+    align-self: center;
+  }
+
+  /* Colors per node type */
+  .node-scheduler { border-color: var(--yellow); }
+  .node-scheduler .step { color: var(--yellow); }
+  .node-scheduler .title { color: var(--yellow); }
+
+  .node-scraper { border-color: var(--blue); }
+  .node-scraper .step { color: var(--blue); }
+  .node-scraper .title { color: var(--blue); }
+
+  .node-agent { border-color: var(--green); }
+  .node-agent .step { color: var(--green); }
+  .node-agent .title { color: var(--green); }
+
+  .node-llm { border-color: var(--purple); }
+  .node-llm .step { color: var(--purple); }
+  .node-llm .title { color: var(--purple); }
+
+  .node-discord { border-color: var(--discord); }
+  .node-discord .step { color: var(--discord); }
+  .node-discord .title { color: #7b8fff; }
+
+  .node-postiz { border-color: var(--orange); }
+  .node-postiz .step { color: var(--orange); }
+  .node-postiz .title { color: var(--orange); }
+
+  .node-twitter { border-color: #1d9bf0; }
+  .node-twitter .step { color: #1d9bf0; }
+  .node-twitter .title { color: #1d9bf0; }
+
+  /* ── Sub-system cards grid ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    max-width: 1100px;
+    margin: 0 auto 72px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    flex-shrink: 0;
+  }
+  .card-title { font-weight: 600; font-size: 0.9rem; }
+  .card-file  { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+  .card ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .card ul li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: #9aabcc;
+  }
+  .card ul li::before {
+    content: '–';
+    color: var(--dim);
+    flex-shrink: 0;
+    margin-top: 0px;
+  }
+  .card ul li strong { color: var(--text); }
+
+  /* card accent colors */
+  .card-green  { border-color: rgba(0,230,118,0.3); }
+  .card-green  .card-icon { background: rgba(0,230,118,0.12); color: var(--green); }
+  .card-blue   { border-color: rgba(79,195,247,0.3); }
+  .card-blue   .card-icon { background: rgba(79,195,247,0.12); color: var(--blue); }
+  .card-purple { border-color: rgba(206,147,216,0.3); }
+  .card-purple .card-icon { background: rgba(206,147,216,0.12); color: var(--purple); }
+  .card-orange { border-color: rgba(255,183,77,0.3); }
+  .card-orange .card-icon { background: rgba(255,183,77,0.12); color: var(--orange); }
+  .card-discord { border-color: rgba(88,101,242,0.4); }
+  .card-discord .card-icon { background: rgba(88,101,242,0.15); color: #7b8fff; }
+  .card-teal   { border-color: rgba(77,208,225,0.3); }
+  .card-teal   .card-icon { background: rgba(77,208,225,0.12); color: var(--teal); }
+  .card-red    { border-color: rgba(239,83,80,0.3); }
+  .card-red    .card-icon { background: rgba(239,83,80,0.12); color: var(--red); }
+  .card-yellow { border-color: rgba(255,241,118,0.3); }
+  .card-yellow .card-icon { background: rgba(255,241,118,0.12); color: var(--yellow); }
+
+  /* ── Tweet Format rotation ── */
+  .formats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    max-width: 1100px;
+    margin: 0 auto 72px;
+  }
+  .format-card {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .format-card .format-name {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .format-card .format-idx {
+    float: right;
+    background: var(--surface2);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 0.68rem;
+    font-family: monospace;
+    color: var(--muted);
+  }
+  .format-card .format-preview {
+    font-size: 0.75rem;
+    color: #9aabcc;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .fmt-0 { border-color: rgba(0,230,118,0.3); }  .fmt-0 .format-name { color: var(--green); }
+  .fmt-1 { border-color: rgba(79,195,247,0.3); }  .fmt-1 .format-name { color: var(--blue); }
+  .fmt-2 { border-color: rgba(206,147,216,0.3); } .fmt-2 .format-name { color: var(--purple); }
+  .fmt-3 { border-color: rgba(255,183,77,0.3); }  .fmt-3 .format-name { color: var(--orange); }
+
+  /* ── Self-learning loop ── */
+  .loop-diagram {
+    max-width: 900px;
+    margin: 0 auto 72px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+  }
+  .loop-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .loop-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .loop-step:last-child { border-bottom: none; }
+  .loop-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .loop-step .loop-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+  .loop-step .loop-desc {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .loop-step .loop-code {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.68rem;
+    color: var(--purple);
+    background: var(--surface2);
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 4px;
+  }
+
+  /* ── Data stores row ── */
+  .stores-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    max-width: 1100px;
+    margin: 0 auto 72px;
+  }
+  .store {
+    background: var(--surface);
+    border: 1.5px dashed var(--dim);
+    border-radius: 10px;
+    padding: 14px 20px;
+    text-align: center;
+    min-width: 160px;
+  }
+  .store .store-icon { font-size: 1.4rem; margin-bottom: 6px; }
+  .store .store-name { font-size: 0.8rem; font-weight: 600; color: var(--text); }
+  .store .store-file { font-family: monospace; font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+
+  /* ── Environment table ── */
+  .env-table {
+    max-width: 900px;
+    margin: 0 auto 72px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .env-table table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .env-table thead th {
+    background: var(--surface2);
+    padding: 10px 16px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+  }
+  .env-table tbody td {
+    padding: 10px 16px;
+    font-size: 0.78rem;
+    border-top: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .env-table tbody td:first-child {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--green);
+    white-space: nowrap;
+  }
+  .env-table tbody td:nth-child(2) { color: #9aabcc; }
+  .env-table tbody td:nth-child(3) { color: var(--muted); }
+
+  /* ── Roadmap ── */
+  .roadmap {
+    max-width: 900px;
+    margin: 0 auto 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .road-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .road-tag {
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .tag-done     { background: rgba(0,230,118,0.12);  color: var(--green);  border: 1px solid rgba(0,230,118,0.3); }
+  .tag-short    { background: rgba(79,195,247,0.12);  color: var(--blue);   border: 1px solid rgba(79,195,247,0.3); }
+  .tag-medium   { background: rgba(255,183,77,0.12);  color: var(--orange); border: 1px solid rgba(255,183,77,0.3); }
+  .tag-long     { background: rgba(239,83,80,0.12);   color: var(--red);    border: 1px solid rgba(239,83,80,0.3); }
+  .road-title { font-size: 0.88rem; font-weight: 600; margin-bottom: 3px; }
+  .road-desc  { font-size: 0.77rem; color: var(--muted); }
+
+  /* ── Divider ── */
+  .divider {
+    max-width: 1100px;
+    margin: 0 auto 48px;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .pipeline-row { flex-direction: column; align-items: stretch; }
+    .pipe-arrow { transform: rotate(90deg); align-self: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ HEADER ══════════════════ -->
+<header>
+  <h1>QuadStar <span>Deals</span> — System Architecture</h1>
+  <p style="margin-top:10px">
+    <span class="badge badge-green">Live · Kimi K2</span>
+    <span class="badge badge-blue">launchd · port 8002</span>
+    <span class="badge badge-purple">LangGraph ReAct Agent</span>
+  </p>
+  <p style="margin-top:12px">Automated Amazon affiliate deal scraper → LLM copywriter → Discord approval → Twitter/X publisher</p>
+</header>
+
+
+<!-- ══════════════════ MAIN PIPELINE ══════════════════ -->
+<div class="pipeline">
+  <div class="section-label">Main Data Flow</div>
+
+  <div class="pipeline-row">
+
+    <div class="pipe-node node-scheduler">
+      <div class="step">Step 1</div>
+      <div class="title">APScheduler</div>
+      <div class="file">api.py</div>
+      <div class="desc">Every 2 hours. Triggers full pipeline automatically.</div>
+    </div>
+
+    <div class="pipe-arrow">›</div>
+
+    <div class="pipe-node node-agent">
+      <div class="step">Step 2</div>
+      <div class="title">LangGraph Agent</div>
+      <div class="file">agent.py</div>
+      <div class="desc">ReAct loop. Plans tool calls: feedback → scrape → notify.</div>
+    </div>
+
+    <div class="pipe-arrow">›</div>
+
+    <div class="pipe-node node-scraper">
+      <div class="step">Step 3</div>
+      <div class="title">Scraper</div>
+      <div class="file">scraper.py</div>
+      <div class="desc">Scrapling stealth + Firecrawl for Slickdeals/DealNews.</div>
+    </div>
+
+    <div class="pipe-arrow">›</div>
+
+    <div class="pipe-node node-llm">
+      <div class="step">Step 4</div>
+      <div class="title">LLM (Kimi K2)</div>
+      <div class="file">notifier.py · llm.py</div>
+      <div class="desc">Generates tweet in one of 4 rotating formats. No prices.</div>
+    </div>
+
+    <div class="pipe-arrow">›</div>
+
+    <div class="pipe-node node-discord">
+      <div class="step">Step 5</div>
+      <div class="title">Discord Card</div>
+      <div class="file">discord_bot.py</div>
+      <div class="desc">Approve / Reject / Post Now / Schedule buttons.</div>
+    </div>
+
+    <div class="pipe-arrow">›</div>
+
+    <div class="pipe-node node-postiz">
+      <div class="step">Step 6</div>
+      <div class="title">Postiz</div>
+      <div class="file">postiz_client.py</div>
+      <div class="desc">Schedules to optimal posting time via smart scheduler.</div>
+    </div>
+
+    <div class="pipe-arrow">›</div>
+
+    <div class="pipe-node node-twitter">
+      <div class="step">Step 7</div>
+      <div class="title">Twitter / X</div>
+      <div class="file">@quadstardeals</div>
+      <div class="desc">Live tweet posted to followers.</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ══════════════════ SUB-SYSTEMS ══════════════════ -->
+<div class="pipeline" style="margin-bottom:8px">
+  <div class="section-label">Sub-systems &amp; Modules</div>
+</div>
+
+<div class="cards-grid">
+
+  <!-- Agent -->
+  <div class="card card-green">
+    <div class="card-header">
+      <div class="card-icon">🤖</div>
+      <div>
+        <div class="card-title">LangGraph ReAct Agent</div>
+        <div class="card-file">src/agent.py</div>
+      </div>
+    </div>
+    <ul>
+      <li><strong>ReAct loop</strong> — reasons about which tool to call next</li>
+      <li><strong>Tools:</strong> scrape deals, send cards, collect feedback, check engagement, get status</li>
+      <li>Runs on-demand from API or terminal via <code style="font-size:0.7rem">python -m src.main</code></li>
+      <li>LLM backend via <strong>llm.py</strong> abstraction (currently Kimi K2)</li>
+    </ul>
+  </div>
+
+  <!-- Scraper -->
+  <div class="card card-blue">
+    <div class="card-header">
+      <div class="card-icon">🔍</div>
+      <div>
+        <div class="card-title">Amazon + Aggregator Scraper</div>
+        <div class="card-file">src/scraper.py · src/amazon_scraper.py</div>
+      </div>
+    </div>
+    <ul>
+      <li><strong>Scrapling</strong> StealthyFetcher — bypasses bot detection for Amazon</li>
+      <li><strong>Firecrawl</strong> for Slickdeals and DealNews (markdown extraction)</li>
+      <li>Playwright fallback if Scrapling fails</li>
+      <li>Parses title, ASIN, discount %, lowest-ever flag, coupon codes</li>
+      <li>Category config — filters by product type (tech, laptops, audio...)</li>
+    </ul>
+  </div>
+
+  <!-- Notifier / Content Gen -->
+  <div class="card card-purple">
+    <div class="card-header">
+      <div class="card-icon">✍️</div>
+      <div>
+        <div class="card-title">Content Generator</div>
+        <div class="card-file">src/notifier.py</div>
+      </div>
+    </div>
+    <ul>
+      <li><strong>_build_system_prompt()</strong> — static rules block, cached by Kimi server</li>
+      <li><strong>_pick_tweet_format()</strong> — <code style="font-size:0.7rem">deal_id % 4</code>, deterministic rotation</li>
+      <li><strong>Signals block</strong> — discount%, lowest-ever, extra savings, coupon code</li>
+      <li><strong>_truncate_tweet()</strong> — word-boundary cut at 280 chars, no mid-word slicing</li>
+      <li><strong>_filter_ai_words()</strong> — removes "game-changer", "seamlessly", etc.</li>
+    </ul>
+  </div>
+
+  <!-- LLM Layer -->
+  <div class="card card-purple" style="border-color:rgba(206,147,216,0.15)">
+    <div class="card-header">
+      <div class="card-icon">🧠</div>
+      <div>
+        <div class="card-title">LLM Abstraction</div>
+        <div class="card-file">src/llm.py</div>
+      </div>
+    </div>
+    <ul>
+      <li><strong>Provider-agnostic</strong> — flip <code style="font-size:0.7rem">LLM_PROVIDER</code> to switch</li>
+      <li>Current: <strong>Kimi K2</strong> via OpenAI-compatible endpoint, server-side caching</li>
+      <li>Supports: anthropic, kimi, openai, google, ollama</li>
+      <li>System/user split — static system prompt cacheable, dynamic user prompt per call</li>
+    </ul>
+  </div>
+
+  <!-- Discord Bot -->
+  <div class="card card-discord">
+    <div class="card-header">
+      <div class="card-icon">💬</div>
+      <div>
+        <div class="card-title">Discord Approval Bot</div>
+        <div class="card-file">src/discord_bot.py</div>
+      </div>
+    </div>
+    <ul>
+      <li>Sends deal cards with <strong>5 action buttons</strong> per deal</li>
+      <li><strong>Approve</strong> → schedules via Postiz at smart time</li>
+      <li><strong>Post Now</strong> → immediate posting, bypasses schedule</li>
+      <li><strong>Skip</strong> / <strong>Reject</strong> → marks deal, won't resurface</li>
+      <li><strong>Pick Time</strong> → custom slot override</li>
+      <li>Reads reactions + comments for feedback loop</li>
+    </ul>
+  </div>
+
+  <!-- Postiz -->
+  <div class="card card-orange">
+    <div class="card-header">
+      <div class="card-icon">📅</div>
+      <div>
+        <div class="card-title">Postiz Scheduler</div>
+        <div class="card-file">src/postiz_client.py</div>
+      </div>
+    </div>
+    <ul>
+      <li>Self-hosted social media scheduler (localhost:4007)</li>
+      <li><strong>get_smart_time()</strong> — picks optimal posting slot</li>
+      <li>Returns post ID used for engagement tracking</li>
+      <li>Platform: Twitter/X (LinkedIn placeholder gated by env flag)</li>
+    </ul>
+  </div>
+
+  <!-- A/B Testing -->
+  <div class="card card-teal">
+    <div class="card-header">
+      <div class="card-icon">🧪</div>
+      <div>
+        <div class="card-title">A/B Testing</div>
+        <div class="card-file">src/ab_testing.py</div>
+      </div>
+    </div>
+    <ul>
+      <li><strong>generate_ab_variants()</strong> — 2 style variants per deal</li>
+      <li><strong>classify_style()</strong> — tags hook_type, cta_style, emoji count</li>
+      <li><strong>check_engagement()</strong> — fetches likes/retweets/replies from Postiz</li>
+      <li><strong>get_winning_styles()</strong> — returns best-performing style attrs</li>
+    </ul>
+  </div>
+
+  <!-- Tweet Learner -->
+  <div class="card card-teal" style="border-color:rgba(77,208,225,0.15)">
+    <div class="card-header">
+      <div class="card-icon">📈</div>
+      <div>
+        <div class="card-title">Self-Learning Style Engine</div>
+        <div class="card-file">src/tweet_learner.py</div>
+      </div>
+    </div>
+    <ul>
+      <li>Tracks up to <strong>200 tweets</strong> in <code style="font-size:0.7rem">data/tweet_performance.json</code></li>
+      <li>Scores: <code style="font-size:0.7rem">likes + retweets×2 + replies×3</code></li>
+      <li><strong>get_style_guidance()</strong> — emits directive "USE hook_type=caps" into prompt</li>
+      <li>Falls back to A/B test winners until organic data accumulates (min 3 samples)</li>
+    </ul>
+  </div>
+
+  <!-- Price Monitor -->
+  <div class="card card-red">
+    <div class="card-header">
+      <div class="card-icon">📉</div>
+      <div>
+        <div class="card-title">Price Monitor</div>
+        <div class="card-file">src/price_monitor.py</div>
+      </div>
+    </div>
+    <ul>
+      <li>Watchlist of tracked ASINs</li>
+      <li><strong>detect_drops()</strong> — runs every 2h alongside main scrape</li>
+      <li>Auto-reposts deals that hit a new low</li>
+      <li>LLM writes fresh copy for re-posts (not template copy-paste)</li>
+    </ul>
+  </div>
+
+  <!-- Feedback -->
+  <div class="card card-yellow">
+    <div class="card-header">
+      <div class="card-icon">💡</div>
+      <div>
+        <div class="card-title">Feedback Collector</div>
+        <div class="card-file">src/feedback.py</div>
+      </div>
+    </div>
+    <ul>
+      <li>Reads Discord <strong>reactions</strong> (👍 / 👎) and <strong>comments</strong></li>
+      <li>Sentiment analysis on text replies</li>
+      <li>Extracts keywords for category preference learning</li>
+      <li>Stored as user prefs — biases future scraping categories</li>
+    </ul>
+  </div>
+
+  <!-- Platform Router -->
+  <div class="card card-blue" style="border-color:rgba(79,195,247,0.15)">
+    <div class="card-header">
+      <div class="card-icon">🔀</div>
+      <div>
+        <div class="card-title">Platform Router</div>
+        <div class="card-file">src/platform_router.py</div>
+      </div>
+    </div>
+    <ul>
+      <li>Maps deals to target platforms (Twitter, LinkedIn)</li>
+      <li>LinkedIn gated by <code style="font-size:0.7rem">LINKEDIN_ENABLED=false</code></li>
+      <li><strong>describe_platforms()</strong> — human-readable summary for Discord cards</li>
+    </ul>
+  </div>
+
+  <!-- FastAPI Server -->
+  <div class="card card-green" style="border-color:rgba(0,230,118,0.15)">
+    <div class="card-header">
+      <div class="card-icon">⚡</div>
+      <div>
+        <div class="card-title">FastAPI + Scheduler</div>
+        <div class="card-file">src/api.py · launchd</div>
+      </div>
+    </div>
+    <ul>
+      <li>Runs on <strong>port 8002</strong>, managed by macOS launchd (auto-restart)</li>
+      <li>APScheduler: <strong>every 2h</strong> full pipeline, <strong>every 2h</strong> price monitor</li>
+      <li>Discord bot in background thread (separate event loop)</li>
+      <li><code style="font-size:0.7rem">/health</code> endpoint, OpenClaw webhook for NL commands</li>
+    </ul>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ══════════════════ TWEET FORMAT ROTATION ══════════════════ -->
+<div class="pipeline" style="margin-bottom:24px">
+  <div class="section-label">Tweet Format Rotation</div>
+  <div class="section-heading" style="text-align:center">4 Structural Templates — Picked by <code style="font-size:0.85rem;background:var(--surface2);padding:2px 8px;border-radius:4px">deal_id % 4</code></div>
+  <p class="section-sub" style="text-align:center">Same deal ID always gets the same format (deterministic), so A/B data is consistent across re-posts.</p>
+</div>
+
+<div class="formats-grid">
+
+  <div class="format-card fmt-0">
+    <div class="format-name">bullet_caps <span class="format-idx">id % 4 == 0</span></div>
+    <div class="format-preview">HOOK LINE IN CAPS
+
+✅ Feature one
+✅ Feature two
+✅ Feature three
+
+CTA + affiliate link
+
+#QuadStarDeals</div>
+  </div>
+
+  <div class="format-card fmt-1">
+    <div class="format-name">question_inline <span class="format-idx">id % 4 == 1</span></div>
+    <div class="format-preview">Question hook?
+
+Short observation about deal.
+Feature 1 | Feature 2 | Feature 3
+
+CTA + link
+
+#QuadStarDeals</div>
+  </div>
+
+  <div class="format-card fmt-2">
+    <div class="format-name">observation_arrows <span class="format-idx">id % 4 == 2</span></div>
+    <div class="format-preview">Observation opener.
+
+→ Feature or stat
+→ Feature or stat
+→ Feature or stat
+
+CTA + link
+#QuadStarDeals</div>
+  </div>
+
+  <div class="format-card fmt-3">
+    <div class="format-name">prose_no_bullets <span class="format-idx">id % 4 == 3</span></div>
+    <div class="format-preview">Short punchy hook sentence.
+
+Two sentences of prose describing
+the product and why the deal matters.
+
+CTA + link #QuadStarDeals</div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ══════════════════ SELF-LEARNING LOOP ══════════════════ -->
+<div class="pipeline" style="margin-bottom:24px">
+  <div class="section-label">Self-Learning Feedback Loop</div>
+  <div class="section-heading" style="text-align:center">The Bot Gets Smarter With Every Posted Tweet</div>
+  <p class="section-sub" style="text-align:center">Engagement data flows back into the system prompt as explicit directives.</p>
+</div>
+
+<div class="loop-diagram">
+  <div class="loop-steps">
+
+    <div class="loop-step">
+      <div class="loop-num" style="background:rgba(0,230,118,0.15);color:var(--green)">1</div>
+      <div>
+        <div class="loop-title">Tweet Posted</div>
+        <div class="loop-desc">Approved deal is scheduled via Postiz. Postiz post ID saved alongside the tweet record.</div>
+        <span class="loop-code">tweet_learner.record_tweet()</span>
+      </div>
+    </div>
+
+    <div class="loop-step">
+      <div class="loop-num" style="background:rgba(79,195,247,0.15);color:var(--blue)">2</div>
+      <div>
+        <div class="loop-title">Engagement Collected</div>
+        <div class="loop-desc">Postiz analytics API polled for likes, retweets, replies. Stored in tweet_performance.json (last 200).</div>
+        <span class="loop-code">tweet_learner.collect_engagement()</span>
+      </div>
+    </div>
+
+    <div class="loop-step">
+      <div class="loop-num" style="background:rgba(206,147,216,0.15);color:var(--purple)">3</div>
+      <div>
+        <div class="loop-title">Style Classified</div>
+        <div class="loop-desc">Each tweet tagged with hook_type, cta_style, emoji count, feature count.</div>
+        <span class="loop-code">ab_testing.classify_style()</span>
+      </div>
+    </div>
+
+    <div class="loop-step">
+      <div class="loop-num" style="background:rgba(255,183,77,0.15);color:var(--orange)">4</div>
+      <div>
+        <div class="loop-title">Winners Identified</div>
+        <div class="loop-desc">Score = likes + retweets×2 + replies×3. Best hook type and CTA style computed. Falls back to A/B test data when &lt;3 organic samples.</div>
+        <span class="loop-code">tweet_learner.get_style_guidance()</span>
+      </div>
+    </div>
+
+    <div class="loop-step">
+      <div class="loop-num" style="background:rgba(239,83,80,0.15);color:var(--red)">5</div>
+      <div>
+        <div class="loop-title">Directives Injected</div>
+        <div class="loop-desc">Winners become explicit instructions in the LLM prompt: "USE hook_type=caps (n=12, avg engagement 47.3)".</div>
+        <span class="loop-code">notifier._build_system_prompt() injects style_guidance</span>
+      </div>
+    </div>
+
+    <div class="loop-step">
+      <div class="loop-num" style="background:rgba(0,230,118,0.15);color:var(--green)">6</div>
+      <div>
+        <div class="loop-title">Better Tweets Generated</div>
+        <div class="loop-desc">Next LLM call biased toward proven winners. Loop continues — each cycle of posts tightens the signal.</div>
+        <span class="loop-code">→ back to Step 1</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ══════════════════ DATA STORES ══════════════════ -->
+<div class="pipeline" style="margin-bottom:24px">
+  <div class="section-label">Data Storage</div>
+</div>
+
+<div class="stores-row">
+  <div class="store">
+    <div class="store-icon">🗃️</div>
+    <div class="store-name">Deal Database</div>
+    <div class="store-file">data/deals.json</div>
+  </div>
+  <div class="store">
+    <div class="store-icon">📊</div>
+    <div class="store-name">Tweet Performance</div>
+    <div class="store-file">data/tweet_performance.json</div>
+  </div>
+  <div class="store">
+    <div class="store-icon">🧪</div>
+    <div class="store-name">A/B Test Results</div>
+    <div class="store-file">data/ab_results.json</div>
+  </div>
+  <div class="store">
+    <div class="store-icon">👤</div>
+    <div class="store-name">User Preferences</div>
+    <div class="store-file">data/user_prefs.json</div>
+  </div>
+  <div class="store">
+    <div class="store-icon">👁️</div>
+    <div class="store-name">Watchlist</div>
+    <div class="store-file">data/watchlist.json</div>
+  </div>
+  <div class="store">
+    <div class="store-icon">🗂️</div>
+    <div class="store-name">Custom Categories</div>
+    <div class="store-file">data/custom_categories.json</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ══════════════════ ENV VARS ══════════════════ -->
+<div class="pipeline" style="margin-bottom:24px">
+  <div class="section-label">Key Environment Variables</div>
+</div>
+
+<div class="env-table">
+  <table>
+    <thead>
+      <tr>
+        <th>Variable</th>
+        <th>Value / Example</th>
+        <th>Purpose</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>LLM_PROVIDER</td><td>kimi</td><td>Active LLM backend (flip to switch)</td></tr>
+      <tr><td>KIMI_API_KEY</td><td>sk-PYDB...</td><td>Moonshot AI API key</td></tr>
+      <tr><td>KIMI_MODEL</td><td>kimi-k2-0905-preview</td><td>Model name</td></tr>
+      <tr><td>KIMI_BASE_URL</td><td>https://api.moonshot.ai/v1</td><td>OpenAI-compatible endpoint</td></tr>
+      <tr><td>DISCORD_BOT_TOKEN</td><td>MTQ4N...</td><td>Bot authentication</td></tr>
+      <tr><td>DISCORD_CHANNEL_ID</td><td>1487...</td><td>Channel to send deal cards</td></tr>
+      <tr><td>DISCORD_WEBHOOK_URL</td><td>https://discord.com/...</td><td>Fallback webhook for quick messages</td></tr>
+      <tr><td>AMAZON_AFFILIATE_TAG</td><td>quadstar0e-20</td><td>Appended to all product links</td></tr>
+      <tr><td>FIRECRAWL_API_KEY</td><td>fc-244c...</td><td>Aggregator scraping (Slickdeals/DealNews)</td></tr>
+      <tr><td>POSTIZ_API_URL</td><td>http://localhost:4007/api</td><td>Local Postiz scheduler</td></tr>
+      <tr><td>POSTIZ_API_KEY</td><td>e37b...</td><td>Postiz auth</td></tr>
+      <tr><td>LINKEDIN_ENABLED</td><td>false</td><td>Gate — flip true when ready</td></tr>
+      <tr><td>APP_PORT</td><td>8002</td><td>FastAPI port</td></tr>
+      <tr><td>BRAND_NAME</td><td>QuadStar Deals</td><td>Injected into generated copy</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="divider"></div>
+
+
+<!-- ══════════════════ ROADMAP ══════════════════ -->
+<div class="pipeline" style="margin-bottom:24px">
+  <div class="section-label">Feature Roadmap</div>
+</div>
+
+<div class="roadmap">
+  <div class="road-item">
+    <span class="road-tag tag-done">Done</span>
+    <div>
+      <div class="road-title">Kimi K2 LLM + System/User Prompt Split</div>
+      <div class="road-desc">Switched from Ollama to Kimi K2 API. Separated static rules (system, cacheable) from per-deal data (user). Format adherence: 4/4.</div>
+    </div>
+  </div>
+  <div class="road-item">
+    <span class="road-tag tag-done">Done</span>
+    <div>
+      <div class="road-title">4-Format Tweet Rotation</div>
+      <div class="road-desc">bullet_caps / question_inline / observation_arrows / prose_no_bullets, picked deterministically by deal_id % 4.</div>
+    </div>
+  </div>
+  <div class="road-item">
+    <span class="road-tag tag-done">Done</span>
+    <div>
+      <div class="road-title">Self-Learning Style Engine Fixed</div>
+      <div class="road-desc">tweet_learner.get_style_guidance() was silently broken (wrong field name). Rewrote to score from engagement dict correctly.</div>
+    </div>
+  </div>
+  <div class="road-item">
+    <span class="road-tag tag-short">Short-term</span>
+    <div>
+      <div class="road-title">2 Example Tweets in System Prompt</div>
+      <div class="road-desc">Add one example per format. Pushes system prompt past ~2048 tokens so Kimi server-side cache activates. Improves format adherence to near-perfect.</div>
+    </div>
+  </div>
+  <div class="road-item">
+    <span class="road-tag tag-short">Short-term</span>
+    <div>
+      <div class="road-title">Star Rating + Review Count as Deal Signals</div>
+      <div class="road-desc">Scrape from Amazon product pages. Add to signals_block: "4.7★ (12k reviews)". Stronger social proof in generated copy.</div>
+    </div>
+  </div>
+  <div class="road-item">
+    <span class="road-tag tag-medium">Medium</span>
+    <div>
+      <div class="road-title">Weekly Performance Digest to Discord</div>
+      <div class="road-desc">Monday digest: top/worst formats, viral count, style recommendations from tweet_learner.</div>
+    </div>
+  </div>
+  <div class="road-item">
+    <span class="road-tag tag-medium">Medium</span>
+    <div>
+      <div class="road-title">Unify generate_ab_variants() with System/User Split</div>
+      <div class="road-desc">A/B variant generator still uses old single-prompt pattern. Align with _generate_content() approach for consistency.</div>
+    </div>
+  </div>
+  <div class="road-item">
+    <span class="road-tag tag-long">Longer-term</span>
+    <div>
+      <div class="road-title">Thumbnail Badge Overlays</div>
+      <div class="road-desc">Pillow/FFmpeg overlay on product images: discount % pill, "Lowest Price" ribbon. Improves visual engagement on timeline.</div>
+    </div>
+  </div>
+  <div class="road-item">
+    <span class="road-tag tag-long">Longer-term</span>
+    <div>
+      <div class="road-title">Multi-Retailer Expansion</div>
+      <div class="road-desc">Best Buy, B&H, Newegg with their own affiliate links. Separate scraper modules per retailer.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Footer -->
+<div style="text-align:center;margin-top:60px;color:var(--muted);font-size:0.78rem">
+  QuadStar Deals · Auto-generated architecture diagram · Last updated 2026-04-19
+</div>
+
+</body>
+</html>

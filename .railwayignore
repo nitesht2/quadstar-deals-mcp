@@ -1,0 +1,8 @@
+# Don't deploy local data files — Railway persistent disk manages these at runtime
+data/
+graphify-out/
+.playwright-mcp/
+*.pyc
+__pycache__/
+.DS_Store
+venv/

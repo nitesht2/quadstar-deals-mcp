@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "docs",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8088", "--directory", "docs"],
+      "port": 8088
+    }
+    ,{
+      "name": "diagram",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8089"],
+      "port": 8089
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+# Home & Improvement profile — template for "QuadStar Home Deals".
+# Rename to home.yaml and set AGENT_PROFILE=home to activate.
+#
+# Running: uvicorn src.api:app --port 8003 with AGENT_PROFILE=home.
+# Use a dedicated .env (separate Discord bot, separate Telegram channel, etc.).
+
+brand_name: "QuadStar Home"
+brand_hashtag: "#QuadStarHome"
+affiliate_tag: "quadstar-home-20"   # get a separate Amazon Associates tag
+
+# Aggregator sources relevant to home & improvement
+deal_sources:
+  - name: "Slickdeals Home"
+    url: "https://slickdeals.net/deals/home-garden/"
+    type: "aggregator"
+  - name: "Slickdeals Appliances"
+    url: "https://slickdeals.net/deals/appliances/"
+    type: "aggregator"
+  - name: "DealNews Home"
+    url: "https://www.dealnews.com/s55/Home-Garden/"
+    type: "aggregator"
+  # HomeDepot/Lowes often need real-browser scraping — use browse_with_openclaw
+
+brand_tier_1:
+  - dyson
+  - shark
+  - ninja
+  - kitchenaid
+  - cuisinart
+  - vitamix
+  - breville
+  - miele
+  - weber
+  - traeger
+  - bosch
+  - dewalt
+  - milwaukee
+  - makita
+
+brand_tier_2:
+  - eufy
+  - roborock
+  - ecovacs
+  - irobot
+  - bissell
+  - hoover
+  - instant pot
+  - ninja creami
+  - black decker
+  - ryobi
+  - craftsman
+  - stanley
+  - yeti
+
+keywords:
+  # Kitchen
+  - air fryer
+  - instant pot
+  - coffee maker
+  - espresso machine
+  - blender
+  - food processor
+  - mixer
+  - toaster
+  - microwave
+  - dishwasher
+  - refrigerator
+  - freezer
+  - knife set
+  - cookware
+  - cast iron
+  - non-stick
+  # Cleaning
+  - vacuum
+  - cordless vacuum
+  - robot vacuum
+  - steam mop
+  - carpet cleaner
+  - air purifier
+  - humidifier
+  - dehumidifier
+  # Outdoor & Grill
+  - grill
+  - smoker
+  - patio
+  - outdoor furniture
+  - fire pit
+  - lawn mower
+  - leaf blower
+  - pressure washer
+  - hose
+  # Tools & Hardware
+  - drill
+  - impact driver
+  - circular saw
+  - miter saw
+  - table saw
+  - jigsaw
+  - sander
+  - screwdriver
+  - tool set
+  - tool chest
+  - ladder
+  - workbench
+  # Home Improvement
+  - smart bulb
+  - smart plug
+  - smart thermostat
+  - ring doorbell
+  - security camera
+  - garage door opener
+  - water heater
+  - ceiling fan
+  - faucet
+  - showerhead
+  - toilet
+  - paint
+  - flooring
+  - lighting

@@ -1,0 +1,30 @@
+venv/
+.venv/
+# Retired standalone bot — local cruft, has its own .env + .venv
+hermes-bot/
+data/source_performance.json
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.egg-info/
+dist/
+build/
+data/debug_*.png
+data/tweet_performance.json
+data/ab_results.json
+data/deals.json
+data/price_history.json
+data/repost_tracking.json
+data/pending_reposts.json
+data/custom_categories.json
+data/replied_tweets.json
+data/reply_feedback.json
+data/ab_counter.json
+.playwright-mcp/
+
+# graphify — all output is local only, never commit
+graphify-out/
+
+# Environment variables
+.env

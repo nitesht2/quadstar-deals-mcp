@@ -1,0 +1,20 @@
+{
+  "name": "Quantdeal",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "postCreateCommand": "pip install curl_cffi patchright playwright && pip install -r requirements.txt && patchright install chromium && playwright install --with-deps chromium",
+  "forwardPorts": [5432],
+  "features": {
+    "ghcr.io/itsmechlark/features/postgresql:1": {
+      "version": "16"
+    }
+  },
+  "postStartCommand": "pg_isready || pg_ctlcluster 16 main start && psql -U postgres -c 'CREATE DATABASE quantdeal;' 2>/dev/null; psql -U postgres -d quantdeal -f sql/schema.sql 2>/dev/null",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.debugpy"
+      ]
+    }
+  }
+}

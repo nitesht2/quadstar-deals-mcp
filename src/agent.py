@@ -1,0 +1,542 @@
+"""
+agent.py - Deal pipeline tools + deterministic command entrypoint
+
+Holds the 14 _tool functions (scrape, score, schedule, etc.) and run_agent(),
+which routes natural-language commands through tool_router.dispatch() — one
+classify call, then a direct tool call. No agent framework here: planning and
+multi-step reasoning live in the Hermes agent, which drives this backend via
+the /webhook/openclaw endpoint. Used by the Discord bot buttons and Hermes.
+
+Tools:
+  scrape_deals        - Scrape Amazon + aggregator deals for a category
+  get_unposted_deals  - Fetch top ranked unposted deals
+  generate_and_send_cards - Generate tweet content + send Discord approval cards
+  schedule_to_postiz  - Schedule an approved deal to social platforms
+  post_to_telegram    - Post a specific deal directly to Telegram (bypasses Postiz)
+  cancel_price_drop   - Cancel a pending price drop repost before the 15-min timer fires
+  manage_watchlist    - Add/remove/list ASINs for permanent price monitoring
+  read_feedback       - Process Discord reactions/comments into preferences
+  get_status          - Pipeline stats: active deals, posted, categories
+  add_category        - Register a new product category at runtime
+  browse_with_openclaw - Delegate browser tasks to OpenClaw for bot-blocked sites
+
+LLM: DeepSeek Flash (primary) with OpenRouter free-tier fallback, via src/llm.py.
+"""
+
+import json
+import os
+import threading
+
+# bot_loop is set by discord_bot.py after the event loop starts.
+# Protected by bot_loop_lock because agent tools (running in scheduler /
+# FastAPI executor threads) read it while discord_bot.on_ready() (running
+# on the bot's event loop) writes it.
+bot_loop = None
+bot_loop_lock = threading.Lock()
+
+# ── A/B counter persistence ────────────────────────────────────────────────────
+# Persisted across server restarts so the "every 3rd post" cadence survives crashes.
+_AB_COUNTER_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "ab_counter.json")
+
+
+def _load_ab_counter() -> int:
+    try:
+        if os.path.exists(_AB_COUNTER_FILE):
+            with open(_AB_COUNTER_FILE) as f:
+                return int(json.load(f).get("counter", 0))
+    except Exception:
+        pass
+    return 0
+
+
+def _save_ab_counter(counter: int) -> None:
+    os.makedirs(os.path.dirname(_AB_COUNTER_FILE), exist_ok=True)
+    tmp = _AB_COUNTER_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"counter": counter}, f)
+    os.replace(tmp, _AB_COUNTER_FILE)
+
+
+def _get_bot_loop():
+    """Thread-safe accessor for bot_loop. Returns None if bot isn't ready yet."""
+    with bot_loop_lock:
+        return bot_loop
+
+
+# --- Tools ---
+
+def _scrape_deals(category: str = "tech") -> str:
+    """Scrape deals from Amazon + aggregators (Slickdeals/DealNews via Firecrawl)."""
+    from src.amazon_scraper import run_amazon_scraper
+    amazon_count = run_amazon_scraper(category_name=category)
+    agg_count = 0
+    try:
+        from src.scraper import run_scraper
+        agg_count = run_scraper()
+    except Exception:
+        pass  # Firecrawl key may not be set; graceful fallback
+    return f"Scraped {amazon_count} Amazon + {agg_count} aggregator deals ({category})"
+
+
+def _generate_and_send_cards(limit: int = 5) -> str:
+    """Generate tweet content for top unposted deals and send Discord approval cards."""
+    import asyncio
+    from src.database import get_top_unposted_deals
+    from src.notifier import generate_deal_content
+    from src.discord_bot import send_deal_card
+
+    deals = get_top_unposted_deals(limit=limit)
+    if not deals:
+        return "No unposted deals available."
+
+    loop = _get_bot_loop()
+    if not loop:
+        return "Discord bot not ready — cards cannot be sent right now."
+
+    sent = 0
+    for deal in deals:
+        try:
+            content = generate_deal_content(deal)
+            asyncio.run_coroutine_threadsafe(send_deal_card(deal, content), loop)
+            sent += 1
+        except Exception as e:
+            print(f"  [agent] card send failed for deal {deal.get('id')}: {e}")
+
+    return f"Sent {sent} Discord approval card(s)."
+
+
+def _get_unposted_deals(limit: int = 5) -> str:
+    """Get top ranked unposted deals ready for review. Returns JSON list."""
+    from src.database import get_top_unposted_deals
+    deals = get_top_unposted_deals(limit=limit)
+    return json.dumps([
+        {
+            "id": d["id"],
+            "title": d["title"][:80],
+            "discount_pct": d.get("discount_pct", 0),
+            "category": d.get("category", "tech"),
+        }
+        for d in deals
+    ])
+
+
+def _run_pipeline(limit: int = 10) -> str:
+    """Unified deal pipeline. Scrape → score → auto-post if gates pass → silent skip otherwise.
+
+    No Discord approval cards. No human involvement.
+    Gates (all three must pass): discount >= PIPELINE_MIN_DISCOUNT,
+    score >= PIPELINE_MIN_SCORE, content confidence >= PIPELINE_MIN_CONFIDENCE.
+    """
+    import asyncio
+    from src.database import get_top_unposted_deals, cleanup_deals, mark_as_posted, update_deal
+    from src.notifier import generate_deal_content
+    from src.discord_bot import send_auto_approved_notification, reset_batch_times
+    from src.database import score_deal
+    from src.platform_router import select_platforms
+    from src.postiz_client import get_smart_time
+    from src import postiz_client
+    from config.settings import (
+        PIPELINE_MIN_DISCOUNT, PIPELINE_MIN_SCORE, PIPELINE_MIN_CONFIDENCE,
+        ASIN_REPOST_COOLDOWN_DAYS, PIPELINE_MAX_DAILY_POSTS,
+    )
+    from src.database import get_watchlist_asins, get_posts_today_count
+
+    stats = cleanup_deals()
+    if stats.get("expired", 0) > 0:
+        print(f"  Expired {stats['expired']} stale deals")
+
+    # Daily cap check — deals are already sorted best-score-first by get_top_unposted_deals
+    if PIPELINE_MAX_DAILY_POSTS > 0:
+        posts_today = get_posts_today_count()
+        if posts_today >= PIPELINE_MAX_DAILY_POSTS:
+            print(f"  [pipeline] Daily cap reached ({posts_today}/{PIPELINE_MAX_DAILY_POSTS}) — skipping run")
+            return ""
+
+    deals = get_top_unposted_deals(limit=limit)
+    if not deals:
+        return ""  # Nothing to do — stay silent
+
+    reset_batch_times()
+    recent_asins = set(get_watchlist_asins(days=ASIN_REPOST_COOLDOWN_DAYS))
+
+    posted = 0
+    skipped = 0
+    _ab_counter = _load_ab_counter()  # Persisted — survives server restarts
+
+    for deal in deals:
+        discount = deal.get("discount_pct") or 0
+
+        # Gate 0: must have a discount
+        if discount < 1:
+            skipped += 1
+            continue
+
+        # Gate 1: discount threshold
+        if discount < PIPELINE_MIN_DISCOUNT:
+            skipped += 1
+            continue
+
+        # Gate 2: deal score
+        deal_score = score_deal(deal)
+        if deal_score < PIPELINE_MIN_SCORE:
+            skipped += 1
+            continue
+
+        # Gate 3: ASIN cooldown — same product posted recently, skip silently
+        deal_asin = deal.get("asin", "")
+        if deal_asin and deal_asin in recent_asins:
+            print(f"  [pipeline] ASIN cooldown skip: {deal['title'][:50]}")
+            skipped += 1
+            continue
+
+        # All score gates passed — generate content
+        content = generate_deal_content(deal)
+        content_conf = content.get("confidence", 1.0)
+
+        # Gate 4: content quality
+        if content_conf < PIPELINE_MIN_CONFIDENCE:
+            skipped += 1
+            print(f"  [pipeline] Low confidence skip ({content_conf:.2f}): {deal['title'][:50]}")
+            continue
+
+        # Gate 5: live price verification against Amazon
+        # Catches scraper parse errors, product variations with wrong ASIN,
+        # and stale DB prices. Fails open on network errors (won't block posts).
+        from src.price_verifier import verify_deal_price
+        is_valid, reason = verify_deal_price(deal)
+        if not is_valid:
+            skipped += 1
+            print(f"  [pipeline] Price verify skip: {deal['title'][:50]} — {reason}")
+            # Track consecutive failures — purge after 3 strikes to clear stuck deals
+            failures = deal.get("verify_failures", 0) + 1
+            if failures >= 3:
+                mark_as_posted(deal["id"])
+                print(f"  [pipeline] Purged after {failures} verify failures: {deal['title'][:50]}")
+            else:
+                update_deal(deal["id"], {"verify_failures": failures})
+            continue
+        print(f"  [pipeline] Price verified: {reason}")
+        if deal.get("verify_failures"):
+            update_deal(deal["id"], {"verify_failures": 0})
+
+        # All gates passed — schedule to Postiz
+        # Every 5th post runs as A/B test (two variants, different times)
+        platforms = select_platforms(deal)
+        _ab_counter += 1
+        _save_ab_counter(_ab_counter)  # persist immediately — survives crash mid-run
+        use_ab = (_ab_counter % 5 == 0)
+
+        if use_ab:
+            ab_result = _schedule_to_postiz(deal["id"], ",".join(platforms) if isinstance(platforms, list) else platforms, ab_test=True)
+            print(f"  [pipeline] A/B test: {ab_result}")
+            posted += 1
+            if PIPELINE_MAX_DAILY_POSTS > 0 and (posts_today + posted) >= PIPELINE_MAX_DAILY_POSTS:
+                print(f"  [pipeline] Daily cap reached ({posts_today + posted}/{PIPELINE_MAX_DAILY_POSTS}) — stopping run")
+                break
+            loop = _get_bot_loop()
+            if loop:
+                def _on_card_done(fut, title=deal["title"][:40]):
+                    exc = fut.exception()
+                    if exc:
+                        print(f"  [pipeline] Discord card failed for '{title}': {exc}", flush=True)
+                    else:
+                        print(f"  [pipeline] Discord card sent for '{title}'", flush=True)
+                fut = asyncio.run_coroutine_threadsafe(
+                    send_auto_approved_notification(deal, content, "A/B test", platforms),
+                    loop,
+                )
+                fut.add_done_callback(_on_card_done)
+            continue
+
+        scheduled_time, scheduled_label = get_smart_time()
+        result = postiz_client.schedule_post(deal, content, platforms, scheduled_at=scheduled_time)
+
+        if result.get("status") == "ok":
+            mark_as_posted(deal["id"])
+            from src.tweet_learner import record_tweet
+            postiz_id = postiz_client.extract_postiz_id(result)
+            record_tweet(deal["id"], content["tweet_1"], postiz_id, scheduled_time)
+            # Telegram side-channel
+            from src.platform_router import should_post_telegram
+            if should_post_telegram():
+                try:
+                    from src.telegram_client import send_deal as _tg_send
+                    _tg_send(deal, content)
+                except Exception as _tg_exc:
+                    print(f"  [telegram] pipeline post failed: {_tg_exc}")
+            posted += 1
+            print(f"  [pipeline] Posted: {deal['title'][:50]} ({discount:.0f}% off, score={deal_score:.0f}, conf={content_conf:.2f})")
+            # Stop if daily cap reached mid-run
+            if PIPELINE_MAX_DAILY_POSTS > 0 and (posts_today + posted) >= PIPELINE_MAX_DAILY_POSTS:
+                print(f"  [pipeline] Daily cap reached ({posts_today + posted}/{PIPELINE_MAX_DAILY_POSTS}) — stopping run")
+                break
+            # Discord auto-post card
+            loop = _get_bot_loop()
+            if loop:
+                def _on_card_done(fut, title=deal["title"][:40]):
+                    exc = fut.exception()
+                    if exc:
+                        print(f"  [pipeline] Discord card failed for '{title}': {exc}", flush=True)
+                    else:
+                        print(f"  [pipeline] Discord card sent for '{title}'", flush=True)
+                fut = asyncio.run_coroutine_threadsafe(
+                    send_auto_approved_notification(deal, content, scheduled_label, platforms),
+                    loop,
+                )
+                fut.add_done_callback(_on_card_done)
+            else:
+                print(f"  [pipeline] Discord card skipped (bot loop not ready)", flush=True)
+        else:
+            skipped += 1
+            print(f"  [pipeline] Postiz schedule failed for: {deal['title'][:50]}")
+
+    if posted == 0:
+        return ""  # Nothing posted — stay silent
+    return f"Pipeline: {posted} deal(s) scheduled to Postiz. {skipped} skipped."
+
+
+def _schedule_to_postiz(deal_id: int, platforms: str = "", ab_test: bool = False) -> str:
+    """Schedule an approved deal to social platforms via Postiz.
+    If ab_test=True, generates two variants and posts both at different times.
+    """
+    from src.database import get_deal_by_id, mark_as_posted
+    from src.notifier import generate_deal_content, generate_ab_variants
+    from src.platform_router import select_platforms
+    from src.tweet_learner import record_tweet
+    from src import postiz_client
+
+    deal = get_deal_by_id(deal_id)
+    if not deal:
+        return f"Deal {deal_id} not found"
+
+    if platforms:
+        platform_list = [p.strip() for p in platforms.split(",") if p.strip()]
+    else:
+        platform_list = select_platforms(deal)
+
+    if ab_test:
+        # A/B test: generate two variants, post at different times
+        variant_a, variant_b = generate_ab_variants(deal)
+        from src.postiz_client import get_smart_time
+        from src.ab_testing import save_ab_test
+
+        time_a, label_a = get_smart_time()
+        result_a = postiz_client.schedule_post(deal, variant_a, platform_list, scheduled_at=time_a)
+        postiz_id_a = postiz_client.extract_postiz_id(result_a)
+
+        time_b, label_b = get_smart_time()
+        result_b = postiz_client.schedule_post(deal, variant_b, platform_list, scheduled_at=time_b)
+        postiz_id_b = postiz_client.extract_postiz_id(result_b)
+
+        save_ab_test(deal_id, variant_a, variant_b, time_a, time_b, postiz_id_a, postiz_id_b)
+
+        # Record both for self-learning
+        record_tweet(deal_id, variant_a["tweet_1"], postiz_id_a, time_a)
+        record_tweet(deal_id, variant_b["tweet_1"], postiz_id_b, time_b)
+
+        mark_as_posted(deal_id)
+        return f"A/B test scheduled for deal {deal_id}: variant A at {label_a}, variant B at {label_b}"
+
+    # Standard single-variant post
+    content = generate_deal_content(deal)
+    result = postiz_client.schedule_post(deal, content, platform_list)
+    postiz_id = postiz_client.extract_postiz_id(result)
+
+    # Record for self-learning
+    record_tweet(deal_id, content["tweet_1"], postiz_id)
+
+    mark_as_posted(deal_id)
+    return f"Scheduled deal {deal_id} to {','.join(platform_list)}: {result.get('status', 'ok')}"
+
+
+def _manage_watchlist(action: str, asin: str = "", title: str = "") -> str:
+    """Add, remove, or list manually-pinned ASINs for price monitoring.
+
+    action: 'add' | 'remove' | 'list'
+    asin:   Amazon ASIN (e.g. B08XYZ1234). Required for add/remove.
+    title:  Human-readable product name for add (optional, improves readability).
+    """
+    from src.price_monitor import add_to_manual_watchlist, remove_from_manual_watchlist, list_manual_watchlist
+    action = action.strip().lower()
+    if action == "list":
+        return list_manual_watchlist()
+    if action == "add":
+        if not asin:
+            return "Provide an ASIN to add. Example: action='add', asin='B08XYZ1234', title='Sony WH-1000XM5'"
+        return add_to_manual_watchlist(asin.strip(), title.strip())
+    if action == "remove":
+        if not asin:
+            return "Provide an ASIN to remove."
+        return remove_from_manual_watchlist(asin.strip())
+    return f"Unknown action '{action}'. Use 'add', 'remove', or 'list'."
+
+
+def _cancel_price_drop(deal_id: int = 0) -> str:
+    """Cancel a pending price drop repost by deal_id before the 15-min timer fires."""
+    from src.database import get_pending_reposts, remove_pending_repost
+    pending_list = get_pending_reposts()
+    if not pending_list:
+        return "No pending price drop reposts at the moment."
+    match = next((p for p in pending_list if p.get("deal_id") == deal_id), None)
+    if not match:
+        # Friendly list of what IS pending so the user can try the right id
+        titles = [
+            f"deal {p.get('deal_id')} — {p.get('deal', {}).get('title', p.get('asin', '?'))[:50]}"
+            for p in pending_list
+        ]
+        return f"No pending repost found for deal {deal_id}. Pending: {'; '.join(titles)}"
+    remove_pending_repost(match["asin"])
+    title = match.get("deal", {}).get("title", match.get("asin", "?"))[:60]
+    return f"Cancelled price drop repost for: {title}"
+
+
+def _browse_with_openclaw(url: str, instruction: str = "") -> str:
+    """Ask OpenClaw to browse a URL as a real user and return scraped content.
+
+    Use for sites that block Scrapling/Playwright: Woot, BestBuy, Reddit r/deals,
+    eBay Deals, Newegg, Slickdeals direct. OpenClaw navigates as a real user so
+    bot-detection doesn't kick in.
+    """
+    from src.openclaw_client import browse, is_configured
+    if not is_configured():
+        return "OpenClaw not configured — set OPENCLAW_WEBHOOK_URL in .env to enable."
+    if not url:
+        return "Provide a URL to browse, e.g. 'browse https://www.woot.com/deals'."
+    content = browse(url, instruction)
+    if not content:
+        return f"OpenClaw returned no content for {url}. Verify OpenClaw is running."
+    return f"OpenClaw scraped {len(content)} chars from {url}:\n{content[:3000]}"
+
+
+def _post_to_telegram(deal_id: int) -> str:
+    """Post a specific deal directly to Telegram, bypassing Postiz.
+
+    Generates fresh tweet content for the deal (same copy used elsewhere)
+    and sends it via the Telegram Bot API. Does NOT mark the deal as posted
+    — this is a side-channel broadcast, the deal can still be scheduled to
+    other platforms separately.
+    """
+    from src.database import get_deal_by_id
+    from src.notifier import generate_deal_content
+    from src.telegram_client import send_deal as _tg_send, is_configured
+
+    if not is_configured():
+        return "Telegram not configured — set TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID"
+
+    deal = get_deal_by_id(deal_id)
+    if not deal:
+        return f"Deal {deal_id} not found"
+
+    content = generate_deal_content(deal)
+    ok = _tg_send(deal, content)
+    if ok:
+        return f"Posted deal {deal_id} to Telegram: {deal.get('title', '')[:60]}"
+    return f"Failed to post deal {deal_id} to Telegram (see logs)"
+
+
+def _read_feedback() -> str:
+    """Read Discord reactions/comments and update deal preferences."""
+    from src.feedback import collect_feedback
+    from src.database import _load_deals
+    deals = _load_deals()
+    posted = [d for d in deals if d.get("is_posted") and d.get("discord_message_id")]
+    count = collect_feedback(posted)
+    return f"Processed {count} feedback signals"
+
+
+def _get_status() -> str:
+    """Get pipeline stats: active deals, posted, scheduled, categories."""
+    from src.database import cleanup_deals
+    from config.categories import list_categories
+    stats = cleanup_deals()
+    stats["categories"] = list_categories()
+    return json.dumps(stats)
+
+
+def _analyze_tweet_performance() -> str:
+    """Collect engagement data and return tweet performance report."""
+    from src.tweet_learner import collect_engagement, get_performance_report
+    updated = collect_engagement()
+    report = get_performance_report()
+    if updated:
+        return f"Updated {updated} engagement records.\n\n{report}"
+    return report
+
+
+def _check_ab_results() -> str:
+    """Check engagement on A/B test variants and return summary."""
+    from src.ab_testing import check_engagement, get_ab_summary
+    updated = check_engagement()
+    summary = get_ab_summary()
+    if updated:
+        return f"Updated {updated} engagement records.\n\n{summary}"
+    return summary
+
+
+def _check_price_drops() -> str:
+    """Check watchlist ASINs for price drops, trigger auto-reposts if eligible."""
+    from src.price_monitor import detect_drops
+    from config.settings import MIN_REPOST_DROP_PCT
+    drops = detect_drops()
+    if not drops:
+        return "No price drops detected across monitored ASINs"
+    lines = [f"Found {len(drops)} price drop(s):"]
+    for d in drops:
+        repost_note = ""
+        if d["drop_pct"] >= MIN_REPOST_DROP_PCT:
+            from src.database import can_repost
+            eligible, reason = can_repost(d["asin"], d["new_price"])
+            repost_note = " [REPOST QUEUED]" if eligible else f" [skip: {reason}]"
+        lines.append(f"  {d['title'][:50]}: ${d['old_price']} -> ${d['new_price']} (-{d['drop_pct']}%){repost_note}")
+    return "\n".join(lines)
+
+
+def _add_category(name: str, keywords: str) -> str:
+    """Add a new product category. keywords = comma-separated list."""
+    import json, os
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "custom_categories.json")
+    cats = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            cats = json.load(f)
+    kw_list = [k.strip() for k in keywords.split(",") if k.strip()]
+    cats[name.lower()] = {
+        "keywords": kw_list,
+        "amazon_urls": [],
+        "min_price": 25,
+        "max_discount": 90,
+    }
+    with open(path, "w") as f:
+        json.dump(cats, f, indent=2)
+    return f"Added category '{name}' with {len(kw_list)} keywords"
+
+
+def run_agent(command: str, thread_id: str = "default") -> str:
+    """Execute a natural-language command via the deterministic tool router.
+
+    All natural-language commands route through tool_router.dispatch():
+    one LLM call (DeepSeek, with keyword fallback) classifies intent, then a
+    direct call to the matching _tool function. No ReAct loop — the planning /
+    multi-step reasoning lives in the Hermes agent, which calls this backend.
+
+    thread_id is accepted for call-site compatibility but unused (dispatch is
+    stateless; conversational memory lives in Hermes).
+
+    Result is pushed to OpenClaw/Hermes as a notification (fire-and-forget).
+    """
+    try:
+        from src.tool_router import dispatch
+        result = dispatch(command)
+    except Exception as exc:
+        result = f"Dispatch error: {exc}"
+        print(f"  [agent] tool_router error: {exc}")
+
+    # Push to OpenClaw/Hermes (fire-and-forget — never blocks response)
+    try:
+        from src.openclaw_client import notify, is_configured
+        if is_configured() and result:
+            notify(result[:1500], title="QuadStar")
+    except Exception:
+        pass
+
+    return result
