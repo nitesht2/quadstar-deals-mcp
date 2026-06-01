@@ -54,27 +54,43 @@ def test_keyword_classify_default_is_pipeline():
     assert _keyword_classify("do the thing")["intent"] == "pipeline"
 
 
-# --- Classify uses Ollama, falls back gracefully ---
+# --- Classify uses the LLM, falls back gracefully ---
 
-def test_classify_falls_back_when_ollama_down():
-    """When Ollama request fails, falls back to keyword classifier."""
+def test_classify_falls_back_when_llm_unavailable():
+    """When src.llm.generate returns None (no key / error), falls back to keyword."""
     from src import tool_router
-    with patch("requests.post", side_effect=Exception("ollama down")):
+    with patch("src.llm.generate", return_value=None):
         out = tool_router._classify("show status")
     assert out["intent"] == "status"
 
 
-def test_classify_uses_ollama_response_when_valid():
-    """When Ollama returns valid JSON, uses it directly."""
+def test_classify_falls_back_when_llm_raises():
+    """When src.llm.generate raises, _classify swallows it and uses keyword."""
     from src import tool_router
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = {
-        "response": '{"intent": "scrape", "params": {"category": "tech"}}'
-    }
-    with patch("requests.post", return_value=mock_resp):
+    with patch("src.llm.generate", side_effect=Exception("boom")):
+        out = tool_router._classify("show status")
+    assert out["intent"] == "status"
+
+
+def test_classify_uses_llm_response_when_valid():
+    """When the LLM returns valid JSON, _classify parses and uses it directly."""
+    from src import tool_router
+    with patch(
+        "src.llm.generate",
+        return_value='{"intent": "scrape", "params": {"category": "tech"}}',
+    ):
         out = tool_router._classify("get me some tech deals")
     assert out["intent"] == "scrape"
     assert out["params"]["category"] == "tech"
+
+
+def test_classify_extracts_json_from_noisy_llm_output():
+    """LLM may wrap JSON in prose/markdown — _classify must still extract it."""
+    from src import tool_router
+    noisy = 'Sure!\n```json\n{"intent": "status", "params": {}}\n```'
+    with patch("src.llm.generate", return_value=noisy):
+        out = tool_router._classify("how are things")
+    assert out["intent"] == "status"
 
 
 # --- Dispatch calls the right tool ---
