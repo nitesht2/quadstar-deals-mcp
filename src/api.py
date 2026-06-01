@@ -485,9 +485,10 @@ async def pipeline_status():
 
     # Score distribution for unposted deals
     from src.database import score_deal
+    from config.settings import PIPELINE_MIN_SCORE
     scores = [score_deal(d) for d in unposted[:20]]  # Sample top 20
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0
-    above_gate = sum(1 for s in scores if s >= 58)
+    above_gate = sum(1 for s in scores if s >= PIPELINE_MIN_SCORE)  # was hardcoded 58
 
     # Source performance
     try:
