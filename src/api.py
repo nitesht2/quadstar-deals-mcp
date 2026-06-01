@@ -393,17 +393,26 @@ async def debug_run_pipeline():
 
 def _scrape_for_agent(category: str = "tech") -> str:
     """Scrape inventory for the agentic supervisor (no posting). Backend owns
-    scraping — reliable Scrapling — so the agent only does judgment, not its
-    own flaky browser-scrape. Returns a one-line count summary."""
+    scraping — Scrapling for Amazon, Playwright for DealNews, RSS for the
+    aggregator feeds — so the agent only does judgment, not flaky browser-scrape.
+    Each engine is independent: one failing never blocks the others.
+    Returns a one-line count summary across all three."""
     from src.amazon_scraper import run_amazon_scraper
     from src.rss_scraper import run_rss_scraper
+    from src.scraper import run_scraper as run_dealnews_scraper
+
     amz = run_amazon_scraper(category_name=category, fast_track=False)
     rss = 0
     try:
         rss = run_rss_scraper()
     except Exception as e:
         print(f"  [scrape] rss failed: {e}")
-    return f"scraped {amz} amazon + {rss} rss ({category})"
+    dn = 0
+    try:
+        dn = run_dealnews_scraper()
+    except Exception as e:
+        print(f"  [scrape] dealnews (playwright) failed: {e}")
+    return f"scraped {amz} amazon + {dn} dealnews + {rss} rss ({category})"
 
 
 @app.post("/tools/{tool}")
