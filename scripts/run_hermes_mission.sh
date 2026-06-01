@@ -11,10 +11,10 @@
 # Replaces the old raw `hermes -z` invocation.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# gpt-4o-mini, not deepseek-v4-flash: the cheap deepseek model returns EMPTY via
-# `hermes -z` (drops all tool calls — the agent no-shows). gpt-4o-mini reliably
-# emits tool calls and drives the full judgment loop end-to-end, for ~$1-2/mo.
-# This is the model dial that flips the system from agent-assisted to agent-driven.
-export HERMES_MODEL="${HERMES_MODEL:-openrouter/openai/gpt-4o-mini}"
+# deepseek/deepseek-chat (DIRECT via DEEPSEEK_API_KEY) — drives the lean mission
+# reliably (verified: emits tool calls + a decision). NOTE the no-show was the
+# *flash* model via OpenRouter (openrouter/deepseek/deepseek-v4-flash returns
+# empty through `hermes -z`); the direct deepseek-chat model is reliable + cheap.
+export HERMES_MODEL="${HERMES_MODEL:-deepseek/deepseek-chat}"
 export HERMES_MISSION_FILE="${HERMES_MISSION_FILE:-$(pwd)/.hermes-mission.txt}"
 exec venv/bin/python -m src.agent_supervisor
