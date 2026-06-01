@@ -579,22 +579,26 @@ def run_amazon_scraper(category_name: str = "tech", fast_track: bool = False) ->
 
     saved = 0
     for deal in deals:
-        # Record price even if deal is duplicate (builds history)
-        if deal.get("asin") and deal.get("deal_price"):
-            record_price(deal["asin"], deal["deal_price"])
+        # One malformed deal must never abort the whole batch — isolate each.
+        try:
+            # Record price even if deal is duplicate (builds history)
+            if deal.get("asin") and deal.get("deal_price"):
+                record_price(deal["asin"], deal["deal_price"])
 
-        # Fill missing ratings via product page fetch (best-effort, silent on fail)
-        if deal.get("star_rating") is None and deal.get("asin"):
-            rating, count = fetch_product_rating(deal["asin"])
-            if rating:
-                deal["star_rating"] = rating
-                deal["review_count"] = count
+            # Fill missing ratings via product page fetch (best-effort, silent on fail)
+            if deal.get("star_rating") is None and deal.get("asin"):
+                rating, count = fetch_product_rating(deal["asin"])
+                if rating:
+                    deal["star_rating"] = rating
+                    deal["review_count"] = count
 
-        if save_deal(deal):
-            saved += 1
-            lowest_tag = " [LOWEST EVER]" if deal.get("is_lowest_ever") else ""
-            rating_tag = f" | {deal['star_rating']}★ ({deal.get('review_count', 0):,})" if deal.get("star_rating") else ""
-            print(f"    Saved: ${deal['deal_price']:.0f} | {deal['title'][:50]}{lowest_tag}{rating_tag}")
+            if save_deal(deal):
+                saved += 1
+                lowest_tag = " [LOWEST EVER]" if deal.get("is_lowest_ever") else ""
+                rating_tag = f" | {deal['star_rating']}★ ({deal.get('review_count') or 0:,})" if deal.get("star_rating") else ""
+                print(f"    Saved: ${deal['deal_price']:.0f} | {deal['title'][:50]}{lowest_tag}{rating_tag}")
+        except Exception as exc:
+            print(f"    [scraper] skipped a deal ({deal.get('asin', '?')}): {exc}")
 
     print(f"  {saved} new Amazon deals saved ({len(deals)} found total)")
     return saved
