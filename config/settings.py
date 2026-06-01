@@ -73,11 +73,16 @@ AMAZON_ONLY = True           # Only show deals with Amazon links (you earn commi
 # Bose/Sony/Apple rarely discount 35%+. Let the score gate be the real quality
 # bar; this just excludes non-deals. NOTE: also set in .env — update both.
 PIPELINE_MIN_DISCOUNT = float(os.getenv("PIPELINE_MIN_DISCOUNT", "15"))
-# 35, recalibrated against live inventory: fixing the lowest-ever badge over-fire
-# (it previously fired for EVERY deal = a phantom +22) dropped honest scores ~17
-# pts. 35 restores ~3-4 posts/run from the current queue. Will rise naturally as
-# real price history + engagement data accumulate. See qualifies_as_lowest().
-PIPELINE_MIN_SCORE = float(os.getenv("PIPELINE_MIN_SCORE", "35"))
+# 28 — cold-start calibration. badge (22 pts) + engagement (8 pts) = 30 of 100
+# points are STRUCTURALLY 0 until data matures: badge needs >=3 price
+# observations per ASIN (qualifies_as_lowest), engagement needs tweet-performance
+# history — neither exists yet on fresh inventory. So achievable max today is ~70
+# and real deals land 22-42 (measured against the live queue). 28 surfaces the
+# genuinely-decent deals (iPad, Sony XM6, Fire TV, Hisense...) to the agent/human
+# while still dropping the weakest. RAISE THIS toward 40-45 as price_history +
+# engagement accumulate over the coming weeks (the dormant 30 pts come online).
+# Low risk to keep loose: the human-approval gate is the real quality filter now.
+PIPELINE_MIN_SCORE = float(os.getenv("PIPELINE_MIN_SCORE", "28"))
 PIPELINE_MIN_CONFIDENCE = float(os.getenv("PIPELINE_MIN_CONFIDENCE", "0.85"))
 # Max auto-posts to X per calendar day. Best-scored deals post first.
 # Prevents flood during big sales (Prime Day etc). Set 0 to disable cap.
