@@ -96,7 +96,8 @@ def test_scheduler_jobs_are_async_callables():
     """All scheduled entrypoints must be async functions."""
     import inspect
     from src import api
-    for name in ("_auto_run", "_price_monitor_run", "_fast_track_run", "_ab_engagement_check"):
+    for name in ("_auto_run", "_price_monitor_run", "_ab_engagement_check",
+                 "_weekly_digest_run", "_silence_check_run"):
         fn = getattr(api, name)
         assert inspect.iscoroutinefunction(fn), f"{name} must be async"
 

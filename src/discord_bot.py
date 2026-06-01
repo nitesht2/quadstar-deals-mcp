@@ -295,23 +295,6 @@ def _schedule_deal(deal_id: int, scheduled_at: str = None, platform: str = None)
             platform_status[p] = {"status": "scheduled", "scheduled_at": scheduled_at}
         update_deal(deal_id, {"platforms": platform_status})
 
-        # Telegram: side-channel, posts immediately (no Postiz, no peak-time scheduling).
-        # Guard "telegram" not in platform_status prevents double-posting when
-        # _schedule_deal() is called twice (once for twitter, once for linkedin).
-        from src.platform_router import should_post_telegram
-        if should_post_telegram() and "telegram" not in platform_status:
-            try:
-                from src.telegram_client import send_deal as _tg_send
-                import datetime as _dt
-                if _tg_send(deal, content):
-                    platform_status["telegram"] = {
-                        "status": "posted",
-                        "posted_at": _dt.datetime.now().isoformat(),
-                    }
-                    update_deal(deal_id, {"platforms": platform_status})
-            except Exception as _tg_exc:
-                print(f"  [telegram] Failed for deal {deal_id}: {_tg_exc}", flush=True)
-
         # Check if ALL targeted platforms are now scheduled
         all_targeted = select_platforms(deal)
         all_scheduled = all(

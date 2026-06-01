@@ -99,12 +99,6 @@ def schedule_to_postiz(deal_id: int, platforms: str = "", ab_test: bool = False)
     return _via_service("schedule_to_postiz", deal_id=deal_id, platforms=platforms, ab_test=ab_test)
 
 
-@mcp.tool()
-def post_to_telegram(deal_id: int) -> str:
-    """Post a deal directly to Telegram, bypassing Postiz (side-channel)."""
-    return _via_service("post_to_telegram", deal_id=deal_id)
-
-
 # ── Learning loop (call these FIRST each tick) ─────────────────────────────────
 
 @mcp.tool()

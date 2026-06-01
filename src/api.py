@@ -113,24 +113,6 @@ def _run_reply_finder():
         print(f"  [scheduler] Reply finder: {count} cards sent to Discord", flush=True)
 
 
-async def _telegram_queue_run():
-    """Flush queued Telegram posts during active hours."""
-    loop = asyncio.get_running_loop()
-    try:
-        await loop.run_in_executor(None, _run_telegram_queue)
-    except Exception as e:
-        _log_job_error("telegram_queue", e)
-
-
-def _run_telegram_queue():
-    from src.telegram_client import process_queue
-    sent = process_queue()
-    if sent:
-        print(f"  [scheduler] Telegram queue: {sent} posts sent")
-
-
-
-
 async def _ab_engagement_check():
     """Scheduled job: fetch engagement metrics for A/B test variants."""
     loop = asyncio.get_running_loop()
@@ -320,11 +302,6 @@ async def lifespan(app: FastAPI):
         _ab_engagement_check, "cron", hour="9,18", minute=45, id="ab_engagement",
         max_instances=1, coalesce=True, misfire_grace_time=600,
     )
-    # Telegram queue: every 30 min during active hours
-    scheduler.add_job(
-        _telegram_queue_run, "cron", hour="4-18", minute="*/30", id="telegram_queue",
-        max_instances=1, coalesce=True, misfire_grace_time=300,
-    )
     # Reply finder: DISABLED — was flagging account as inauthentic engagement
     # scheduler.add_job(
     #     _reply_finder_run, "cron", hour="6-18", minute="15,45", id="reply_finder",
@@ -342,7 +319,6 @@ async def lifespan(app: FastAPI):
     )
     scheduler.start()
     print("  APScheduler started -- deals at 8am, 12pm, 5pm, 7pm PST, prices 6AM-6PM/2h, A/B 9AM+6PM, digest Mon 9AM")
-    print("  [scheduler] Telegram queue: every 30 min (4AM-6PM only) — all times PST")
 
     # Send startup alert to Discord so you know if server restarted overnight
     _send_startup_alert()
@@ -432,7 +408,6 @@ async def call_tool(tool: str, request: Request):
                                        int(body.get("deal_id", 0) or 0),
                                        str(body.get("platforms", "")),
                                        bool(body.get("ab_test", False))),
-        "post_to_telegram":        lambda: _a._post_to_telegram(int(body.get("deal_id", 0) or 0)),
         "check_price_drops":       lambda: _a._check_price_drops(),
     }
     fn = tools.get(tool)

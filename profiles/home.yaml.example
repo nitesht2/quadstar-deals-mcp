@@ -2,7 +2,7 @@
 # Rename to home.yaml and set AGENT_PROFILE=home to activate.
 #
 # Running: uvicorn src.api:app --port 8003 with AGENT_PROFILE=home.
-# Use a dedicated .env (separate Discord bot, separate Telegram channel, etc.).
+# Use a dedicated .env (separate Discord bot, separate Postiz channel, etc.).
 
 brand_name: "QuadStar Home"
 brand_hashtag: "#QuadStarHome"

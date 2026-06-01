@@ -2,7 +2,7 @@
 # Rename to sneakers.yaml and set AGENT_PROFILE=sneakers to activate.
 #
 # Running: uvicorn src.api:app --port 8002 with AGENT_PROFILE=sneakers.
-# Use a dedicated .env (separate Discord bot, separate Telegram channel, etc.).
+# Use a dedicated .env (separate Discord bot, separate Postiz channel, etc.).
 
 brand_name: "QuadStar Sneakers"
 brand_hashtag: "#QuadStarSneakers"

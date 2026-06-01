@@ -148,7 +148,9 @@ uvicorn src.api:app --host 0.0.0.0 --port 8001
 
 ## Agent Tools
 
-The LangGraph ReAct agent has 7 tools:
+The Hermes agent drives this backend via `/webhook/hermes`. The backend exposes
+these tools (dispatched deterministically by `tool_router.dispatch()` — one intent
+classify call, then a direct function call; no agent framework runs here):
 
 | Tool | Description |
 |---|---|
@@ -207,7 +209,7 @@ quadstar-deals/
 │   ├── categories.py            # Category registry (tech + runtime-addable)
 │   └── brand_voice.md           # Brand voice rules (~220 banned words)
 ├── src/
-│   ├── agent.py                 # LangGraph ReAct agent + pipeline
+│   ├── agent.py                 # Backend tools + deterministic pipeline (driven by Hermes)
 │   ├── api.py                   # FastAPI server (APScheduler + webhook)
 │   ├── discord_bot.py           # Deal cards with persistent buttons
 │   ├── llm.py                   # DeepSeek API interface (single provider)
@@ -216,7 +218,7 @@ quadstar-deals/
 │   ├── amazon_scraper.py        # Amazon scraping (Scrapling + Playwright)
 │   ├── scraper.py               # Firecrawl aggregator scraping
 │   ├── database.py              # JSON storage, dedup, freshness
-│   └── ... (price monitor, telegram, tweet learner, etc.)
+│   └── ... (price monitor, tweet learner, etc.)
 ├── data/                        # Runtime database (gitignored)
 ├── .env.example                 # Template with all env vars
 └── requirements.txt

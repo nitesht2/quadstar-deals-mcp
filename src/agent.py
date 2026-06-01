@@ -5,7 +5,7 @@ Holds the 14 _tool functions (scrape, score, schedule, etc.) and run_agent(),
 which routes natural-language commands through tool_router.dispatch() — one
 classify call, then a direct tool call. No agent framework here: planning and
 multi-step reasoning live in the Hermes agent, which drives this backend via
-the /webhook/openclaw endpoint. Used by the Discord bot buttons and Hermes.
+the /webhook/hermes endpoint. Used by the Discord bot buttons and Hermes.
 
 Tools:
   scrape_deals        - Scrape Amazon + aggregator deals for a category
@@ -13,7 +13,6 @@ Tools:
   get_unposted_deals  - Fetch top ranked unposted deals
   generate_and_send_cards - Generate tweet content + send Discord approval cards
   schedule_to_postiz  - Schedule an approved deal to social platforms
-  post_to_telegram    - Post a specific deal directly to Telegram (bypasses Postiz)
   cancel_price_drop   - Cancel a pending price drop repost before the 15-min timer fires
   manage_watchlist    - Add/remove/list ASINs for permanent price monitoring
   read_feedback       - Process Discord reactions/comments into preferences
@@ -313,9 +312,11 @@ def _get_unposted_deals(limit: int = 5) -> str:
 def _run_pipeline(limit: int = 10) -> str:
     """Unified deal pipeline. Scrape → score → auto-post if gates pass → silent skip otherwise.
 
-    No Discord approval cards. No human involvement.
-    Gates (all three must pass): discount >= PIPELINE_MIN_DISCOUNT,
-    score >= PIPELINE_MIN_SCORE, content confidence >= PIPELINE_MIN_CONFIDENCE.
+    No Discord approval cards. No human involvement. A deal posts only if it
+    clears every gate: discount >= PIPELINE_MIN_DISCOUNT, score >=
+    PIPELINE_MIN_SCORE, not in ASIN cooldown, under the per-category daily cap,
+    content confidence >= PIPELINE_MIN_CONFIDENCE, and live price verification.
+    Daily and per-category caps bound total volume.
     """
     import asyncio
     from src.database import get_top_unposted_deals, cleanup_deals, mark_as_posted, update_deal
@@ -328,8 +329,11 @@ def _run_pipeline(limit: int = 10) -> str:
     from config.settings import (
         PIPELINE_MIN_DISCOUNT, PIPELINE_MIN_SCORE, PIPELINE_MIN_CONFIDENCE,
         ASIN_REPOST_COOLDOWN_DAYS, PIPELINE_MAX_DAILY_POSTS,
+        PIPELINE_MAX_PER_CATEGORY_PER_DAY,
     )
-    from src.database import get_watchlist_asins, get_posts_today_count
+    from src.database import (
+        get_watchlist_asins, get_posts_today_count, get_category_posts_today,
+    )
 
     stats = cleanup_deals()
     if stats.get("expired", 0) > 0:
@@ -348,6 +352,9 @@ def _run_pipeline(limit: int = 10) -> str:
 
     reset_batch_times()
     recent_asins = set(get_watchlist_asins(days=ASIN_REPOST_COOLDOWN_DAYS))
+    # Per-category daily counts — seeded from today's posts, bumped as we post
+    # this run, so the category cap holds across both restarts and within a run.
+    cat_counts = get_category_posts_today()
 
     posted = 0
     skipped = 0
@@ -376,6 +383,14 @@ def _run_pipeline(limit: int = 10) -> str:
         deal_asin = deal.get("asin", "")
         if deal_asin and deal_asin in recent_asins:
             print(f"  [pipeline] ASIN cooldown skip: {deal['title'][:50]}")
+            skipped += 1
+            continue
+
+        # Gate 3.5: per-category daily cap — keep the feed varied
+        deal_cat = deal.get("category") or "tech"
+        if PIPELINE_MAX_PER_CATEGORY_PER_DAY > 0 and \
+                cat_counts.get(deal_cat, 0) >= PIPELINE_MAX_PER_CATEGORY_PER_DAY:
+            print(f"  [pipeline] Category cap skip ({deal_cat}): {deal['title'][:50]}")
             skipped += 1
             continue
 
@@ -420,6 +435,7 @@ def _run_pipeline(limit: int = 10) -> str:
             ab_result = _schedule_to_postiz(deal["id"], ",".join(platforms) if isinstance(platforms, list) else platforms, ab_test=True)
             print(f"  [pipeline] A/B test: {ab_result}")
             posted += 1
+            cat_counts[deal_cat] = cat_counts.get(deal_cat, 0) + 1
             if PIPELINE_MAX_DAILY_POSTS > 0 and (posts_today + posted) >= PIPELINE_MAX_DAILY_POSTS:
                 print(f"  [pipeline] Daily cap reached ({posts_today + posted}/{PIPELINE_MAX_DAILY_POSTS}) — stopping run")
                 break
@@ -446,15 +462,8 @@ def _run_pipeline(limit: int = 10) -> str:
             from src.tweet_learner import record_tweet
             postiz_id = postiz_client.extract_postiz_id(result)
             record_tweet(deal["id"], content["tweet_1"], postiz_id, scheduled_time)
-            # Telegram side-channel
-            from src.platform_router import should_post_telegram
-            if should_post_telegram():
-                try:
-                    from src.telegram_client import send_deal as _tg_send
-                    _tg_send(deal, content)
-                except Exception as _tg_exc:
-                    print(f"  [telegram] pipeline post failed: {_tg_exc}")
             posted += 1
+            cat_counts[deal_cat] = cat_counts.get(deal_cat, 0) + 1
             print(f"  [pipeline] Posted: {deal['title'][:50]} ({discount:.0f}% off, score={deal_score:.0f}, conf={content_conf:.2f})")
             # Stop if daily cap reached mid-run
             if PIPELINE_MAX_DAILY_POSTS > 0 and (posts_today + posted) >= PIPELINE_MAX_DAILY_POSTS:
@@ -596,32 +605,6 @@ def _browse_with_openclaw(url: str, instruction: str = "") -> str:
     if not content:
         return f"OpenClaw returned no content for {url}. Verify OpenClaw is running."
     return f"OpenClaw scraped {len(content)} chars from {url}:\n{content[:3000]}"
-
-
-def _post_to_telegram(deal_id: int) -> str:
-    """Post a specific deal directly to Telegram, bypassing Postiz.
-
-    Generates fresh tweet content for the deal (same copy used elsewhere)
-    and sends it via the Telegram Bot API. Does NOT mark the deal as posted
-    — this is a side-channel broadcast, the deal can still be scheduled to
-    other platforms separately.
-    """
-    from src.database import get_deal_by_id
-    from src.notifier import generate_deal_content
-    from src.telegram_client import send_deal as _tg_send, is_configured
-
-    if not is_configured():
-        return "Telegram not configured — set TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID"
-
-    deal = get_deal_by_id(deal_id)
-    if not deal:
-        return f"Deal {deal_id} not found"
-
-    content = generate_deal_content(deal)
-    ok = _tg_send(deal, content)
-    if ok:
-        return f"Posted deal {deal_id} to Telegram: {deal.get('title', '')[:60]}"
-    return f"Failed to post deal {deal_id} to Telegram (see logs)"
 
 
 def _read_feedback() -> str:

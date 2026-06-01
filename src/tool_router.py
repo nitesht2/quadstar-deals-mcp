@@ -1,9 +1,9 @@
 """tool_router.py — Intent classifier + direct tool dispatcher.
 
-The sole executor for natural-language commands (replaces the old LangGraph
-ReAct loop). One LLM call (DeepSeek Flash → OpenRouter fallback) classifies
-intent, then a direct call to the matching _tool_function() in src/agent.py.
-No agent loop, no state machine — planning lives in the Hermes agent upstream.
+The sole executor for natural-language commands. One LLM call (DeepSeek Flash →
+OpenRouter fallback) classifies intent, then a direct call to the matching
+_tool_function() in src/agent.py. No agent loop, no state machine — planning
+lives in the Hermes agent upstream.
 
 Falls back to keyword matching if the LLM is unavailable.
 """
@@ -15,11 +15,11 @@ _INTENT_SCHEMA = """
 Return ONLY valid JSON:
 {
   "intent": one of [pipeline, scrape, ingest, cards, status, unposted, schedule,
-                    telegram, feedback, price_check, watchlist, cancel_drop,
+                    feedback, price_check, watchlist, cancel_drop,
                     ab_results, tweet_perf, add_category, browse],
   "params": {
     "category": "tech",      // for scrape
-    "deal_id": 0,            // for schedule / telegram / cancel_drop
+    "deal_id": 0,            // for schedule / cancel_drop
     "limit": 5,              // for cards / unposted
     "asin": "",              // for watchlist
     "action": "list",        // for watchlist: add | remove | list
@@ -72,12 +72,6 @@ def _keyword_classify(command: str) -> dict:
         return {"intent": "status", "params": {}}
     if any(w in cmd for w in ("price drop", "price check", "check price", "monitor price")):
         return {"intent": "price_check", "params": {}}
-    if "telegram" in cmd:
-        deal_id_m = re.search(r"\b(\d+)\b", cmd)
-        return {
-            "intent": "telegram",
-            "params": {"deal_id": int(deal_id_m.group()) if deal_id_m else 0},
-        }
     if "watchlist" in cmd:
         action = "list"
         if "add" in cmd:
@@ -138,7 +132,6 @@ def dispatch(command: str) -> str:
                             int(p.get("deal_id", 0) or 0),
                             str(p.get("platforms", "")),
                             bool(p.get("ab_test", False))),
-        "telegram":     lambda: _a._post_to_telegram(int(p.get("deal_id", 0) or 0)),
         "feedback":     lambda: _a._read_feedback(),
         "price_check":  lambda: _a._check_price_drops(),
         "watchlist":    lambda: _a._manage_watchlist(

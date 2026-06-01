@@ -109,18 +109,6 @@ def describe_platforms(platforms: list[str]) -> str:
         "tiktok": "TikTok",
         "bluesky": "Bluesky",
         "threads": "Threads",
-        "telegram": "Telegram",
     }
     names = [icons.get(p, p) for p in platforms]
     return ", ".join(names)
-
-
-def should_post_telegram() -> bool:
-    """Return True if Telegram is configured. All approved deals go to Telegram.
-
-    Telegram is NOT included in select_platforms() because it bypasses Postiz
-    and posts immediately (not "scheduled"). Including it there would stall
-    the all_scheduled check in _schedule_deal().
-    """
-    from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID
-    return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID)

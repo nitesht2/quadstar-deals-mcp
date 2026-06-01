@@ -75,29 +75,37 @@ AMAZON_ONLY = True           # Only show deals with Amazon links (you earn commi
 # Unified pipeline thresholds — all three must pass to auto-post.
 # Nothing meets criteria → deal is silently skipped. No Discord cards.
 PIPELINE_MIN_DISCOUNT = float(os.getenv("PIPELINE_MIN_DISCOUNT", "35"))
-PIPELINE_MIN_SCORE = float(os.getenv("PIPELINE_MIN_SCORE", "58"))
+# 52, not 58: the revenue retune zeroed the old engagement half-weight default,
+# which shifted the whole score distribution down ~5-7 pts. 52 preserves the
+# pre-retune selectivity (still needs price sweet-spot + a real-deal signal).
+PIPELINE_MIN_SCORE = float(os.getenv("PIPELINE_MIN_SCORE", "52"))
 PIPELINE_MIN_CONFIDENCE = float(os.getenv("PIPELINE_MIN_CONFIDENCE", "0.85"))
 # Max auto-posts to X per calendar day. Best-scored deals post first.
 # Prevents flood during big sales (Prime Day etc). Set 0 to disable cap.
 PIPELINE_MAX_DAILY_POSTS = int(os.getenv("PIPELINE_MAX_DAILY_POSTS", "4"))
+# Max auto-posts per category per calendar day — forces feed variety so one
+# hot category (e.g. headphones) can't take every daily slot. Set 0 to disable.
+PIPELINE_MAX_PER_CATEGORY_PER_DAY = int(os.getenv("PIPELINE_MAX_PER_CATEGORY_PER_DAY", "2"))
 
-# Deal scoring weights (0-100 composite score)
-SCORE_WEIGHT_DISCOUNT = 25
-SCORE_WEIGHT_BRAND = 20
-SCORE_WEIGHT_PRICE_RANGE = 15
-SCORE_WEIGHT_ENGAGEMENT = 15
-SCORE_WEIGHT_BADGE = 10
-SCORE_WEIGHT_FRESHNESS = 10
-SCORE_WEIGHT_TRENDING = 5
+# Deal scoring weights (0-100 composite score).
+# Tuned for REVENUE / CLICKS: reward verifiable "real deal" signals that drive a
+# converting click. Lowest-ever price is the hardest-to-fake proof a deal is real,
+# so it carries the most weight; price sweet-spot ($100-500) is the impulse-buy +
+# commission band; trending (repeat appearances) signals genuine demand. Brand is a
+# trust multiplier (down-weighted + word-boundary matched, see score_deal). Engagement
+# is mostly a constant today (sparse history) so it is the smallest factor.
+# Weights MUST sum to 100 so the 0-100 scale and the PIPELINE_MIN_SCORE gate hold.
+SCORE_WEIGHT_DISCOUNT = 20
+SCORE_WEIGHT_BRAND = 14
+SCORE_WEIGHT_PRICE_RANGE = 18
+SCORE_WEIGHT_ENGAGEMENT = 8
+SCORE_WEIGHT_BADGE = 22
+SCORE_WEIGHT_FRESHNESS = 8
+SCORE_WEIGHT_TRENDING = 10
 
 # Minimum price drop % from the original posted price for price-drop auto-approve.
 # Gates the 15-min timer path alongside PIPELINE_MIN_SCORE + PIPELINE_MIN_CONFIDENCE.
 MIN_PRICE_DROP_AUTO_PCT = float(os.getenv("MIN_PRICE_DROP_AUTO_PCT", "5"))
-
-# Telegram active-posting window (UTC hours, inclusive). Posts outside this
-# window are queued and sent when the window next opens.
-TELEGRAM_MIN_HOUR = int(os.getenv("TELEGRAM_MIN_HOUR", "7"))   # 7am UTC
-TELEGRAM_MAX_HOUR = int(os.getenv("TELEGRAM_MAX_HOUR", "22"))  # 10pm UTC
 
 # How many days back to check for a recently-posted ASIN before auto-approving.
 # Prevents double-posting the same product within N days.
@@ -138,18 +146,12 @@ POSTIZ_REDDIT_ID = os.getenv("POSTIZ_REDDIT_ID", "")
 POSTIZ_BLUESKY_ID = os.getenv("POSTIZ_BLUESKY_ID", "")
 POSTIZ_THREADS_ID = os.getenv("POSTIZ_THREADS_ID", "")
 
-# Telegram channel (direct Bot API — bypasses Postiz, no Postiz integration needed)
-# 1. Create a bot via @BotFather → copy the token
-# 2. Add the bot as admin to your channel with "Post Messages" permission
-# 3. TELEGRAM_CHANNEL_ID: @channelusername (public) or -1001234567890 (private)
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "")
-
-# OpenClaw (primary orchestrator when configured — LangGraph is the fallback)
+# OpenClaw (optional browser delegation for bot-blocked sites — unused by default).
+# Orchestration is the Hermes agent, which drives this backend via /webhook/hermes.
 # OPENCLAW_WEBHOOK_URL: your OpenClaw webhook plugin URL
 #   e.g. http://localhost:4000/plugins/webhooks/quadstar
 # OPENCLAW_SECRET: Bearer token configured in OpenClaw webhook plugin settings
-# Leave empty to keep using LangGraph (current behaviour, no change).
+# Leave empty to disable OpenClaw browse delegation (default).
 OPENCLAW_WEBHOOK_URL = os.getenv("OPENCLAW_WEBHOOK_URL", "")
 OPENCLAW_SECRET = os.getenv("OPENCLAW_SECRET", "")
 
@@ -157,7 +159,7 @@ OPENCLAW_SECRET = os.getenv("OPENCLAW_SECRET", "")
 # Amazon category URLs). Profiles live in profiles/<name>.yaml.
 # When unset or "tech" (the default), behaviour is identical to pre-profile pipeline.
 # Replicate for a new vertical: copy profiles/tech.yaml → profiles/sneakers.yaml,
-# set AGENT_PROFILE=sneakers + PORT=8002 + a separate Discord/Telegram channel.
+# set AGENT_PROFILE=sneakers + PORT=8002 + a separate Discord channel.
 AGENT_PROFILE = os.getenv("AGENT_PROFILE", "tech")
 
 # Data directory — isolated per agent profile. Each niche gets its own deals.json,
@@ -230,7 +232,7 @@ TECH_KEYWORDS = [
 _profile_path = os.path.join(_repo_root, "profiles", f"{AGENT_PROFILE}.yaml")
 if os.path.exists(_profile_path):
     try:
-        import yaml  # PyYAML is already a transitive dep via LangChain
+        import yaml  # PyYAML
         with open(_profile_path) as _f:
             _profile = yaml.safe_load(_f) or {}
         # Override brand/identity

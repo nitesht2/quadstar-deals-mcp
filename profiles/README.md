@@ -25,7 +25,7 @@ anything else.
 # 1. Copy a template
 cp profiles/sneakers.yaml.example profiles/sneakers.yaml
 
-# 2. Create a dedicated .env.sneakers with its own Discord/Telegram/Postiz creds
+# 2. Create a dedicated .env.sneakers with its own Discord/Postiz creds
 # (don't reuse tech's Discord bot — each niche deserves its own audience)
 
 # 3. Start the second server on a different port
@@ -33,8 +33,6 @@ AGENT_PROFILE=sneakers \
 DATA_DIR=./data/sneakers \
 DISCORD_BOT_TOKEN=... \
 DISCORD_CHANNEL_ID=... \
-TELEGRAM_BOT_TOKEN=... \
-TELEGRAM_CHANNEL_ID=@quadstar_sneakers \
 uvicorn src.api:app --port 8002
 ```
 
@@ -47,5 +45,5 @@ Point a second OpenClaw webhook route at `localhost:8002` and you're live.
    categories; sneakers needs StockX/SNKRS; home needs HomeDepot/Lowes)
 3. **Brands** — tier your top brands for scoring
 4. **Amazon URLs** — best-seller and deal pages specific to the category
-5. **Social accounts** — new Discord, Telegram, Twitter, etc. for the niche
+5. **Social accounts** — new Discord, Twitter, etc. for the niche
 6. **Affiliate tag** — separate Amazon Associates tag per vertical

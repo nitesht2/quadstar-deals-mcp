@@ -3,7 +3,7 @@ llm.py - LLM Interface (DeepSeek Flash primary, OpenRouter fallback)
 
 Provider-agnostic text + structured generation over the OpenAI-compatible API.
 Tries DeepSeek Flash first (cheap, automatic context caching). On any error or
-rate-limit, falls back to OpenRouter's free tier. No LangChain, no local model.
+rate-limit, falls back to OpenRouter's free tier. Plain HTTP, no local model.
 
 Env:
     DEEPSEEK_API_KEY   - primary provider key (or LLM_API_KEY)

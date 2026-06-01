@@ -16,6 +16,7 @@ Features:
 
 import json
 import os
+import re
 import threading
 from datetime import datetime, timedelta
 
@@ -471,6 +472,19 @@ def save_deal(deal: dict) -> bool:
     return True
 
 
+def _title_has_brand(title_lower: str, brands: list[str]) -> bool:
+    """True if any brand appears as a whole word/token in the title.
+
+    Word-boundary match avoids substring false positives. Hyphenated and
+    multi-word brands ("tp-link", "western digital") are matched literally
+    with the hyphen/space treated as a boundary.
+    """
+    for brand in brands:
+        if re.search(rf"(?<!\w){re.escape(brand)}(?!\w)", title_lower):
+            return True
+    return False
+
+
 def score_deal(deal: dict, _perf_records: list | None = None) -> float:
     """Score a deal 0-100 using weighted multi-factor model.
 
@@ -492,17 +506,14 @@ def score_deal(deal: dict, _perf_records: list | None = None) -> float:
     discount_score = min(max((discount - 15) / 35, 0), 1) * SCORE_WEIGHT_DISCOUNT
     score += discount_score
 
-    # 2. Brand tier (0-20): tier 1=full, tier 2=60%, unknown=25%
+    # 2. Brand tier: tier 1=full, tier 2=60%, unknown=25%.
+    # Word-boundary match — substring matching falsely fired ("lg" in "bluegill",
+    # "ring" in "earring", "amd" in "lambda", "intel" in "intelligent").
     brand_score = SCORE_WEIGHT_BRAND * 0.25  # default unknown
-    for brand in BRAND_TIER_1:
-        if brand in title_lower:
-            brand_score = SCORE_WEIGHT_BRAND
-            break
-    else:
-        for brand in BRAND_TIER_2:
-            if brand in title_lower:
-                brand_score = SCORE_WEIGHT_BRAND * 0.6
-                break
+    if _title_has_brand(title_lower, BRAND_TIER_1):
+        brand_score = SCORE_WEIGHT_BRAND
+    elif _title_has_brand(title_lower, BRAND_TIER_2):
+        brand_score = SCORE_WEIGHT_BRAND * 0.6
     score += brand_score
 
     # 3. Price sweet spot (0-15): $100-500 is best
@@ -559,8 +570,12 @@ def _get_engagement_score(deal: dict, max_weight: float, records: list | None = 
         perf_path = os.path.join(DATA_DIR, "tweet_performance.json")
         records = _safe_load_json(perf_path, [])
 
+    # No history (cold start) or no similar past deal → contribute nothing.
+    # Previously returned half-weight for every no-match deal, which is MOST
+    # deals — that turned engagement into a near-constant bias instead of a
+    # signal. Revenue tuning: only reward deals with real positive history.
     if not records:
-        return max_weight * 0.5
+        return 0.0
 
     title_lower = deal.get("title", "").lower()
     relevant = []
@@ -572,7 +587,7 @@ def _get_engagement_score(deal: dict, max_weight: float, records: list | None = 
                 relevant.append(eng)
 
     if not relevant:
-        return max_weight * 0.5
+        return 0.0
 
     avg_engagement = sum(relevant) / len(relevant)
     normalized = min(avg_engagement / 5.0, 1.0)
@@ -672,6 +687,23 @@ def get_posts_today_count() -> int:
         1 for d in deals
         if d.get("is_posted") and (d.get("posted_at") or "").startswith(today)
     )
+
+
+def get_category_posts_today() -> dict[str, int]:
+    """Count deals auto-posted today (PST calendar day), grouped by category.
+
+    Feeds the per-category daily cap in the pipeline so one hot category can't
+    consume every posting slot. Category defaults to 'tech' when unset.
+    """
+    from datetime import date
+    today = date.today().isoformat()
+    deals = _load_deals()
+    counts: dict[str, int] = {}
+    for d in deals:
+        if d.get("is_posted") and (d.get("posted_at") or "").startswith(today):
+            cat = (d.get("category") or "tech")
+            counts[cat] = counts.get(cat, 0) + 1
+    return counts
 
 
 def get_watchlist_asins(days: int = 7) -> list[str]:

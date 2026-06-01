@@ -136,13 +136,16 @@ def test_remove_pending_repost(tmp_path, monkeypatch):
 
 
 def test_get_engagement_score_accepts_preloaded_records():
-    """The new _perf_records parameter should skip the file read entirely."""
+    """The _perf_records parameter should skip the file read entirely.
+
+    With no history (empty list), engagement contributes 0 — not a half-weight
+    default. The old half-weight default biased every no-data deal upward, which
+    is most deals. Revenue tuning: only deals with real positive history score here.
+    """
     from src import database
     deal = {"title": "Sony WH-1000XM5 Headphones"}
-    # Pass empty list — function should return the neutral default without
-    # even attempting to open tweet_performance.json
     score = database._get_engagement_score(deal, max_weight=15.0, records=[])
-    assert score == 15.0 * 0.5
+    assert score == 0.0
 
 
 def test_get_engagement_score_matches_relevant_records():
@@ -178,3 +181,58 @@ def test_score_deal_threads_preloaded_records(monkeypatch):
     }
     database.score_deal(deal, _perf_records=[])
     assert calls == [[]], "score_deal should forward the preloaded records"
+
+
+# --- Brand matching (word-boundary, not substring) ---
+
+def test_title_has_brand_matches_whole_word():
+    from src import database
+    assert database._title_has_brand("apple macbook air m4", ["apple", "sony"])
+    assert database._title_has_brand("sony wh-1000xm5 headphones", ["apple", "sony"])
+
+
+def test_title_has_brand_rejects_substring_false_positives():
+    """The old substring match falsely fired on these — word boundary must not."""
+    from src import database
+    # "lg" inside "bluegill", "amd" inside "lambda", "intel" inside "intelligent",
+    # "hp" inside "champion", "ring" inside "earring"
+    assert not database._title_has_brand("bluegill fishing lure", ["lg"])
+    assert not database._title_has_brand("lambda calculus book", ["amd"])
+    assert not database._title_has_brand("intelligent thermostat", ["intel"])
+    assert not database._title_has_brand("gold hoop earrings", ["ring"])
+
+
+def test_title_has_brand_handles_hyphenated_and_multiword():
+    from src import database
+    assert database._title_has_brand("tp-link mesh router", ["tp-link"])
+    assert database._title_has_brand("western digital 2tb ssd", ["western digital"])
+
+
+def test_get_category_posts_today_groups_by_category(monkeypatch):
+    """Only today's posted deals count, grouped by category; unset → 'tech'."""
+    from datetime import date
+    from src import database
+    today = date.today().isoformat()
+    fake = [
+        {"is_posted": True, "posted_at": f"{today}T08:00:00", "category": "tech"},
+        {"is_posted": True, "posted_at": f"{today}T09:00:00", "category": "tech"},
+        {"is_posted": True, "posted_at": f"{today}T10:00:00", "category": "home"},
+        {"is_posted": True, "posted_at": f"{today}T11:00:00"},  # no category → tech
+        {"is_posted": True, "posted_at": "2020-01-01T08:00:00", "category": "tech"},  # old
+        {"is_posted": False, "posted_at": f"{today}T12:00:00", "category": "home"},  # unposted
+    ]
+    monkeypatch.setattr(database, "_load_deals", lambda: fake)
+    counts = database.get_category_posts_today()
+    assert counts == {"tech": 3, "home": 1}
+
+
+def test_brand_tier_affects_score():
+    """A tier-1 brand deal should outscore an identical unknown-brand deal."""
+    from src import database
+    base = {
+        "discount_pct": 30, "deal_price": 200,
+        "scraped_at": "2026-04-14T12:00:00", "asin": "B0TESTAAAA",
+    }
+    tier1 = database.score_deal({**base, "title": "Sony WH-1000XM5"}, _perf_records=[])
+    unknown = database.score_deal({**base, "title": "Generic Audio Headset"}, _perf_records=[])
+    assert tier1 > unknown
