@@ -12,32 +12,25 @@ CATEGORIES = {
     "tech": {
         "keywords": TECH_KEYWORDS,
         "amazon_urls": [
-            # Broad deal pages (rotate frequently)
+            # NOTE: Best-seller pages (zgbs/*) deliberately removed — they list
+            # popular items without strikethrough/list prices, so original_price
+            # is None and computed discount = 0, gated out 100% of the time.
+            # Live logs showed 150-206 links per best-seller page extracting to 0
+            # deals each. Keeping only Movers / Goldbox / Deals / Coupons URLs
+            # cut scrape time ~50% with zero loss of qualifying deals.
+            #
+            # Movers-and-shakers — biggest price/rank jumps (often big discounts).
             ("https://www.amazon.com/gp/movers-and-shakers/electronics", "Electronics Movers"),
             ("https://www.amazon.com/gp/movers-and-shakers/pc", "PC Movers"),
-            ("https://www.amazon.com/Best-Sellers-Electronics/zgbs/electronics", "Electronics Best Sellers"),
             ("https://www.amazon.com/gp/goldbox", "Gold Box"),
-            # Category-specific best sellers
-            ("https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/702327011", "Laptop Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/1292115011", "Monitor Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Electronics/zgbs/electronics/172541", "Headphone Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/702348011", "Tablet Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/702319011", "Desktop Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Electronics/zgbs/electronics/1266092011", "Smartwatch Best Sellers"),
-            # Deals pages (filtered deals, higher conversion)
+            # Deals pages — Amazon's filtered "today's deals" for sub-categories.
             ("https://www.amazon.com/deals?ref=dlx_deals_gd_dcl_img_1_702327011_dt_sl14_61", "Laptop Deals"),
             ("https://www.amazon.com/deals?ref=dlx_deals_gd_dcl_img_1_1292115011_dt_sl14_61", "Monitor Deals"),
-            # Coupons and outlet (different inventory, rotates daily)
-            ("https://www.amazon.com/Coupons?category=Electronics", "Electronics Coupons"),
-            ("https://www.amazon.com/Coupons?category=PC", "Computer Coupons"),
-            # Additional categories for variety
-            ("https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/3015433011", "Storage Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Computers-Accessories/zgbs/pc/300189", "Networking Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Electronics/zgbs/electronics/7072561011", "Camera Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Video-Games/zgbs/videogames/14775003011", "Gaming Accessories"),
-            # More deals pages
             ("https://www.amazon.com/deals?ref=dlx_deals_gd_dcl_img_1_172541_dt_sl14_61", "Headphone Deals"),
             ("https://www.amazon.com/deals?ref=dlx_deals_gd_dcl_img_1_702319011_dt_sl14_61", "Desktop Deals"),
+            # Coupons — separate inventory, rotates daily.
+            ("https://www.amazon.com/Coupons?category=Electronics", "Electronics Coupons"),
+            ("https://www.amazon.com/Coupons?category=PC", "Computer Coupons"),
         ],
         "fast_track_urls": [
             ("https://www.amazon.com/gp/goldbox", "Gold Box"),
@@ -65,13 +58,11 @@ CATEGORIES = {
             "storage rack", "shelving", "organizer",
         ],
         "amazon_urls": [
-            ("https://www.amazon.com/Best-Sellers-Kitchen-Dining/zgbs/kitchen", "Kitchen Best Sellers"),
-            ("https://www.amazon.com/Best-Sellers-Home-Kitchen/zgbs/hi", "Home Best Sellers"),
+            # Best-seller pages removed — see tech for rationale (zero-yield).
             ("https://www.amazon.com/gp/movers-and-shakers/kitchen", "Kitchen Movers"),
+            ("https://www.amazon.com/gp/movers-and-shakers/hi", "Home Movers"),
             ("https://www.amazon.com/Coupons?category=Kitchen", "Kitchen Coupons"),
             ("https://www.amazon.com/deals?ref=dlx_deals_gd_dcl_img_1_284507_dt_sl14_61", "Home Deals"),
-            ("https://www.amazon.com/Best-Sellers-Tools-Home-Improvement/zgbs/hi/510182", "Tools Best Sellers"),
-            ("https://www.amazon.com/gp/movers-and-shakers/hi", "Home Movers"),
         ],
         "fast_track_urls": [
             ("https://www.amazon.com/gp/movers-and-shakers/kitchen", "Kitchen Movers"),
@@ -97,11 +88,10 @@ CATEGORIES = {
             "fitness tracker", "sports watch",
         ],
         "amazon_urls": [
-            ("https://www.amazon.com/Best-Sellers-Sports-Outdoors/zgbs/sporting-goods", "Sports Best Sellers"),
+            # Best-seller pages removed — see tech for rationale (zero-yield).
             ("https://www.amazon.com/gp/movers-and-shakers/sporting-goods", "Sports Movers"),
             ("https://www.amazon.com/Coupons?category=Sports", "Sports Coupons"),
             ("https://www.amazon.com/deals?ref=dlx_deals_gd_dcl_img_1_3375251_dt_sl14_61", "Sports Deals"),
-            ("https://www.amazon.com/Best-Sellers-Sports-Outdoors/zgbs/sporting-goods/3407901", "Exercise Best Sellers"),
         ],
         "fast_track_urls": [
             ("https://www.amazon.com/gp/movers-and-shakers/sporting-goods", "Sports Movers"),
