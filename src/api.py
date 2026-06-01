@@ -283,14 +283,16 @@ async def lifespan(app: FastAPI):
     # or Playwright hang cannot spawn a parallel run that corrupts JSON files
     # or fights over the same browser instance. misfire_grace_time caps how
     # late a delayed job can still fire before being skipped.
-    # Active hours: 4:30 AM – 6:30 PM PST (no dead-night runs)
-    # Pipeline: 4 peak times only — 8am, 12pm, 5pm, 7pm PST
-    # Scheduler fires at :30 before each peak so scraping + content gen completes
-    scheduler.add_job(
-        _auto_run, "cron", hour="7,11,16,18", minute=30, id="auto_run",
-        max_instances=1, coalesce=True, misfire_grace_time=600,
-        jitter=1800,  # random 0-30 min delay — posts land at different times daily
-    )
+    # Deterministic auto-post (_auto_run) is DISABLED — the agentic cron now
+    # drives posting: scripts/run_hermes_mission.sh → agent_supervisor runs the
+    # Hermes judgment loop (schedule_deal, caged) and falls back to run_pipeline
+    # only if the agent no-shows. Keeping _auto_run scheduled here too would post
+    # independently and compete with the agent. _auto_run + /debug/run-pipeline
+    # remain callable for manual use; they're just no longer on a timer.
+    # scheduler.add_job(
+    #     _auto_run, "cron", hour="7,11,16,18", minute=30, id="auto_run",
+    #     max_instances=1, coalesce=True, misfire_grace_time=600, jitter=1800,
+    # )
     # Price monitor: every 2h at :00, active 6 AM – 6 PM, with jitter
     scheduler.add_job(
         _price_monitor_run, "cron", hour="6-18/2", minute=0, id="price_monitor",
@@ -318,7 +320,7 @@ async def lifespan(app: FastAPI):
         max_instances=1, coalesce=True, misfire_grace_time=600,
     )
     scheduler.start()
-    print("  APScheduler started -- deals at 8am, 12pm, 5pm, 7pm PST, prices 6AM-6PM/2h, A/B 9AM+6PM, digest Mon 9AM")
+    print("  APScheduler started -- posting driven by agentic cron (supervisor); prices 6AM-6PM/2h, A/B 9AM+6PM, digest Mon 9AM, silence-check")
 
     # Send startup alert to Discord so you know if server restarted overnight
     _send_startup_alert()

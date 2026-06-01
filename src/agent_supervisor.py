@@ -38,10 +38,16 @@ HERMES_MISSION_FILE = os.getenv("HERMES_MISSION_FILE", "/opt/quadstar-deals/.her
 AGENT_TIMEOUT_SECS = int(os.getenv("AGENT_TIMEOUT_SECS", "900"))
 
 
+# Per-tool HTTP timeouts. Scrape walks ~20 Amazon pages twice (Playwright +
+# Scrapling) and legitimately takes minutes — give it room; others are quick.
+_TOOL_TIMEOUTS = {"scrape": 600, "run_pipeline": 300}
+
+
 def _service(tool: str, **payload) -> str:
     """POST to a backend /tools route. Returns the result string ('' on error)."""
     try:
-        r = requests.post(f"{SERVICE_URL}/tools/{tool}", json=payload, timeout=240)
+        r = requests.post(f"{SERVICE_URL}/tools/{tool}", json=payload,
+                          timeout=_TOOL_TIMEOUTS.get(tool, 60))
         data = r.json()
         return data.get("result") or data.get("error") or ""
     except Exception as exc:
