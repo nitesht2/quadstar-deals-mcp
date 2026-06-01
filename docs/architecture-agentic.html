@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuadStar Deals — Agentic Architecture (2026-06)</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --line:#30363d; --txt:#e6edf3; --muted:#8b949e;
+    --agent:#2ea043; --agent-bg:#0f2417; --code:#1f6feb; --code-bg:#0d1f3a;
+    --human:#e3873c; --human-bg:#2b1d0e; --cage:#bb2d3b; --cage-bg:#2a1115;
+    --ext:#8957e5; --ext-bg:#1d1530;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;padding:28px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px;font-size:13px}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:0 0 24px;padding:12px 16px;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .legend span{display:inline-flex;align-items:center;gap:7px;font-size:13px}
+  .dot{width:13px;height:13px;border-radius:3px;display:inline-block}
+  .wrap{max-width:1080px;margin:0 auto}
+  .row{display:flex;align-items:stretch;gap:14px;margin:0 0 14px;flex-wrap:wrap}
+  .node{flex:1;min-width:200px;border:1px solid var(--line);border-radius:10px;padding:13px 15px;background:var(--panel);position:relative}
+  .node h3{margin:0 0 6px;font-size:14px;display:flex;align-items:center;gap:8px}
+  .node p{margin:3px 0;color:var(--muted);font-size:12.5px}
+  .node code{background:#0d1117;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11.5px;color:#9ecbff}
+  .tag{position:absolute;top:-9px;right:12px;font-size:10.5px;font-weight:700;
+    padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px}
+  .agent{border-color:var(--agent)} .agent .tag{background:var(--agent);color:#03130a}
+  .agent h3{color:#56d364}
+  .code{border-color:#2b4f86} .code .tag{background:var(--code);color:#fff}
+  .human{border-color:var(--human)} .human .tag{background:var(--human);color:#1a0f02}
+  .human h3{color:#f0a868}
+  .cage{border-color:var(--cage);background:var(--cage-bg)} .cage .tag{background:var(--cage);color:#fff}
+  .cage h3{color:#ff7b88}
+  .ext{border-color:#6b46c1;background:var(--ext-bg)} .ext .tag{background:var(--ext);color:#fff}
+  .arrow{text-align:center;color:var(--muted);font-size:20px;margin:-6px 0 8px;line-height:1}
+  .band{border:1px dashed var(--agent);border-radius:12px;padding:10px 10px 2px;margin:0 0 14px;
+    background:linear-gradient(180deg,rgba(46,160,67,.06),transparent)}
+  .band .blabel{color:#56d364;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px;padding-left:4px}
+  .store{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 0;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .store .s{font-size:12px;color:var(--muted)} .store .s b{color:var(--txt)}
+  .pct{display:flex;gap:10px;margin:22px 0 0;flex-wrap:wrap}
+  .pct .b{flex:1;min-width:150px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:center}
+  .pct .n{font-size:26px;font-weight:800} .pct .l{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .note{margin-top:20px;color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+  .stagenum{display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;
+    background:#0d1117;border:1px solid var(--line);font-size:11px;color:var(--muted);margin-right:4px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>QuadStar Deals — Agentic Architecture</h1>
+  <p class="sub">Hostinger VPS · cron 4×/day (8a/12p/5p/7p PST) · ~40% agentic · human-approval gated · ~$1-2/mo</p>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--agent)"></i> Agent decides (Hermes / deepseek-chat)</span>
+    <span><i class="dot" style="background:var(--code)"></i> Deterministic code</span>
+    <span><i class="dot" style="background:var(--cage)"></i> The cage (un-bypassable)</span>
+    <span><i class="dot" style="background:var(--human)"></i> Human</span>
+    <span><i class="dot" style="background:var(--ext)"></i> External (Postiz / X)</span>
+  </div>
+
+  <!-- 1 cron -->
+  <div class="row"><div class="node code"><span class="tag">code</span>
+    <h3><span class="stagenum">1</span>APScheduler cron</h3>
+    <p>Fires <code>run_hermes_mission.sh</code> 4×/day. Other jobs: price-monitor, weekly digest, silence-check.</p>
+    <p>Deterministic auto-post job DISABLED — supervisor drives posting now.</p></div></div>
+  <div class="arrow">↓</div>
+
+  <!-- 2 supervisor + baseline scrape -->
+  <div class="row"><div class="node code"><span class="tag">code</span>
+    <h3><span class="stagenum">2</span>Supervisor — <code>agent_supervisor.py</code></h3>
+    <p>Baseline scrape <b>tech</b> (Playwright Amazon Movers/Deals/Coupons + DealNews + RSS). Then launches Hermes. Verifies it ran; falls back to <code>generate_and_send_cards</code> only on true no-show.</p></div></div>
+  <div class="arrow">↓ launches subprocess</div>
+
+  <!-- AGENT BAND -->
+  <div class="band">
+    <div class="blabel">▼ Hermes agent (deepseek-chat) — drives via typed MCP tools — the ~40% agentic core</div>
+    <div class="row">
+      <div class="node agent"><span class="tag">agent</span><h3><span class="stagenum">4</span>Expand inventory</h3>
+        <p>Reads <code>get_candidate_deals</code>. If thin → <code>scrape_category(home/sports)</code>. Decides what to hunt.</p></div>
+      <div class="node agent"><span class="tag">agent</span><h3><span class="stagenum">6</span>Judge / select</h3>
+        <p>Picks the 1-3 best genuine deals. May override the soft eligibility flag with judgment.</p></div>
+    </div>
+    <div class="row">
+      <div class="node agent"><span class="tag">agent</span><h3><span class="stagenum">7</span>Write copy</h3>
+        <p>Brand-voice <code>tweet_1/tweet_2</code> from a compact voice guide. Spartan, concrete, no hype.</p></div>
+      <div class="node agent"><span class="tag">agent</span><h3><span class="stagenum">8</span>Pick time</h3>
+        <p><code>get_posting_insights</code> → a <code>schedule_at</code> at a high-engagement PST hour, no collisions.</p></div>
+    </div>
+    <div class="arrow" style="color:#56d364">↓ calls <code>propose_deal(deal_id, copy, time)</code></div>
+  </div>
+
+  <!-- 5 scoring gate (between candidates and propose, code) -->
+  <div class="row"><div class="node code"><span class="tag">code</span>
+    <h3><span class="stagenum">5</span>Scoring + adaptive gate — <code>database.py</code></h3>
+    <p><code>score_deal</code> (0-100 weighted) + <code>current_score_gate()</code> — self-tunes 28→40 as price-history/engagement mature. Builds the candidate menu the agent reads.</p></div></div>
+  <div class="arrow">↓</div>
+
+  <!-- 9 CAGE -->
+  <div class="row"><div class="node cage"><span class="tag">cage</span>
+    <h3><span class="stagenum">9</span>Guard cage — <code>guards.py enforce_guards()</code></h3>
+    <p>Runs inside <code>propose_deal</code>, server-side, un-bypassable by the agent:</p>
+    <p>① not-already-posted · ② affiliate tag present (revenue) · ③ content confidence · ④ <b>LIVE Amazon price re-verify</b>. Refuses with a code the agent must handle.</p></div></div>
+  <div class="arrow">↓ passes</div>
+
+  <!-- 10 discord card -->
+  <div class="row"><div class="node code"><span class="tag">code</span>
+    <h3><span class="stagenum">10</span>Discord approval card — <code>discord_bot.py</code></h3>
+    <p>Card with the agent's copy + image + <b>Approve / Reject / Pick Time / Skip</b> buttons. Nothing live yet.</p></div></div>
+  <div class="arrow">↓</div>
+
+  <!-- 12 human -->
+  <div class="row"><div class="node human"><span class="tag">human</span>
+    <h3><span class="stagenum">12</span>You approve / reject</h3>
+    <p>The single highest-leverage gate. No tweet goes live without your click. ~15-20% of the decision weight, permanent by design.</p></div></div>
+  <div class="arrow">↓ on Approve</div>
+
+  <!-- 13/14 postiz -->
+  <div class="row"><div class="node ext"><span class="tag">external</span>
+    <h3><span class="stagenum">13-14</span>Postiz → X/Twitter</h3>
+    <p><code>schedule_post</code> (uses stored agent copy) → Postiz (Docker, Caddy HTTPS) publishes to <b>@quadstardeals</b> at the chosen time.</p></div></div>
+  <div class="arrow">↓ hours/days later</div>
+
+  <!-- 15 feedback -->
+  <div class="row"><div class="node code"><span class="tag">code</span>
+    <h3><span class="stagenum">15</span>Engagement capture — <code>tweet_learner.py</code></h3>
+    <p>Job (9am+6pm) pulls likes/RT/impressions from Postiz analytics (JWT) → <code>tweet_performance.json</code>. Feeds the engagement score factor + matures the gate. <b>Currently cold-start (empty until posts accrue Twitter metrics).</b></p></div></div>
+
+  <!-- data stores -->
+  <div class="store">
+    <div class="s">🗄 <b>data/deals.json</b> — live pipeline (active/posted, 24h expiry)</div>
+    <div class="s">🗄 <b>price_history.json</b> — per-ASIN, powers lowest-ever badge</div>
+    <div class="s">🗄 <b>tweet_performance.json</b> — engagement (cold-start)</div>
+    <div class="s">🗄 <b>quadstar.db</b> — permanent SQLite archive</div>
+  </div>
+
+  <!-- percentages -->
+  <div class="pct">
+    <div class="b"><div class="n" style="color:#56d364">~40%</div><div class="l">agentic (Hermes owns stages 4,6,7,8)</div></div>
+    <div class="b"><div class="n" style="color:#58a6ff">~45%</div><div class="l">deterministic code (scrape, gate, cage, deliver)</div></div>
+    <div class="b"><div class="n" style="color:#f0a868">~15%</div><div class="l">human (the approval gate)</div></div>
+  </div>
+
+  <div class="note">
+    <b>Reliability net:</b> if Hermes no-shows (cheap model drops tool calls), the supervisor runs the deterministic <code>generate_and_send_cards</code> fallback — the human still gets approval cards; the cycle never goes empty, never double-posts.<br>
+    <b>Cost:</b> scraping free (Playwright/Scrapling/RSS, no Firecrawl) · LLM deepseek-chat ~$1-2/mo · Postiz/Discord self-hosted free.<br>
+    <b>Agentic ceiling ~55-60%</b> by design — stage 9 (cage) and stage 12 (approval) stay out of the agent's hands forever.
+  </div>
+</div>
+</body>
+</html>
