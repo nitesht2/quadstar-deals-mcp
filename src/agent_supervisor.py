@@ -75,29 +75,45 @@ def _count_eligible() -> int:
         return 0
 
 
-def _run_agent() -> bool:
-    """Run the Hermes judgment mission as a subprocess. True if it exits clean."""
+# An agent run counts as "ran" only if it exited clean AND produced substantive
+# output. The cheap deepseek model returns empty via `hermes -z` (true no-show);
+# a working model emits its reasoning + a result line. This threshold separates
+# "agent failed" from "agent ran and decided".
+_MIN_AGENT_OUTPUT_CHARS = 40
+
+
+def _run_agent() -> tuple[bool, bool]:
+    """Run the Hermes judgment mission. Returns (ran_clean, produced_output).
+
+    ran_clean    — exited 0 within the timeout (didn't crash/hang).
+    produced_output — emitted substantive text (not the empty no-show).
+    Both true ⇒ the agent genuinely ran and its decision should be respected.
+    """
     if not os.path.exists(HERMES_MISSION_FILE):
         print(f"  [supervisor] mission file missing: {HERMES_MISSION_FILE}", flush=True)
-        return False
+        return False, False
     if not os.path.exists(HERMES_BIN):
         print(f"  [supervisor] hermes binary missing: {HERMES_BIN}", flush=True)
-        return False
+        return False, False
     mission = open(HERMES_MISSION_FILE).read()
     try:
         proc = subprocess.run(
             [HERMES_BIN, "-z", mission, "-m", HERMES_MODEL, "--yolo"],
             timeout=AGENT_TIMEOUT_SECS, capture_output=True, text=True,
         )
+        out = (proc.stdout or "").strip()
+        has_output = len(out) >= _MIN_AGENT_OUTPUT_CHARS
         if proc.returncode != 0:
             print(f"  [supervisor] agent exit {proc.returncode}: {proc.stderr[-300:]}", flush=True)
-        return proc.returncode == 0
+        if not has_output:
+            print("  [supervisor] agent produced no substantive output (no-show)", flush=True)
+        return proc.returncode == 0, has_output
     except subprocess.TimeoutExpired:
         print(f"  [supervisor] agent timed out after {AGENT_TIMEOUT_SECS}s", flush=True)
-        return False
+        return False, False
     except Exception as exc:
         print(f"  [supervisor] agent launch failed: {exc}", flush=True)
-        return False
+        return False, False
 
 
 def run_cycle(scrape: bool = True) -> dict:
@@ -106,26 +122,34 @@ def run_cycle(scrape: bool = True) -> dict:
         print(f"  [supervisor] scrape: {_service('scrape', category='tech')}", flush=True)
 
     before = _posts_today()
-    agent_ok = _run_agent()
+    ran_clean, has_output = _run_agent()
     after = _posts_today()
     posted_by_agent = max(0, after - before)
+    agent_ran = ran_clean and has_output  # genuinely ran (not empty / crash / hang)
 
-    outcome = {"agent_ok": agent_ok, "posted_by_agent": posted_by_agent,
+    outcome = {"agent_ran": agent_ran, "posted_by_agent": posted_by_agent,
                "fallback_used": False, "fallback_result": ""}
 
     if posted_by_agent > 0:
         outcome["status"] = "agent_posted"
-        print(f"  [supervisor] agent posted {posted_by_agent} — no fallback needed", flush=True)
+        print(f"  [supervisor] agent posted {posted_by_agent} — agent-driven, done", flush=True)
+        return outcome
+
+    # Agent posted 0. Respect its DECISION if it genuinely ran — it may have
+    # declined junk/stale inventory (a valid judgment). Fall back ONLY when the
+    # agent truly FAILED (empty output / crash / timeout) and deals were postable.
+    if agent_ran:
+        outcome["status"] = "agent_declined"
+        print("  [supervisor] agent ran and posted 0 — respecting its decision (no fallback)", flush=True)
         return outcome
 
     eligible = _count_eligible()
     if eligible == 0:
         outcome["status"] = "correctly_silent"
-        print("  [supervisor] agent posted 0, 0 eligible — correctly silent", flush=True)
+        print("  [supervisor] agent failed but 0 eligible — nothing lost", flush=True)
         return outcome
 
-    # Agent posted nothing while postable inventory exists → no-show. Guarantee a run.
-    print(f"  [supervisor] agent no-show (posted 0, {eligible} eligible) → deterministic fallback", flush=True)
+    print(f"  [supervisor] agent FAILED (no output/crash), {eligible} eligible → deterministic fallback", flush=True)
     outcome["fallback_used"] = True
     outcome["fallback_result"] = _service("run_pipeline", limit=10)
     outcome["status"] = "fallback"
