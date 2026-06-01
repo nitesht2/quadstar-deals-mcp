@@ -3,8 +3,6 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-# Firecrawl API
-FIRECRAWL_API_KEY = os.getenv("FIRECRAWL_API_KEY")
 
 # Discord Bot (for reading reactions/feedback)
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -46,21 +44,17 @@ OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openrouter/owl-alpha")
 BRAND_NAME = os.getenv("BRAND_NAME", "QuadStar Deals")
 BRAND_HASHTAG = os.getenv("BRAND_HASHTAG", "#QuadStarDeals")
 
-# Deal sources to scrape with Firecrawl
+# Deal sources scraped by src/scraper.py (Playwright, free).
+# Slickdeals + DealNews are also covered by src/rss_scraper.py (RSS, free). The
+# Playwright path complements RSS by extracting the price/discount data RSS
+# items don't always include. Camelcamelcamel removed — its top-drops page is
+# behind JS-heavy anti-bot that Playwright can't reliably penetrate; the
+# lowest-ever signal we already track from our own price_history covers the
+# Camel use case at zero cost.
 DEAL_SOURCES = [
     {
-        "name": "Slickdeals",
-        "url": "https://slickdeals.net/deals/amazon/",
-        "type": "aggregator",
-    },
-    {
         "name": "DealNews",
-        "url": "https://www.dealnews.com/s386/Amazon/",
-        "type": "aggregator",
-    },
-    {
-        "name": "Camelcamelcamel",
-        "url": "https://camelcamelcamel.com/top_drops/electronics",
+        "url": "https://www.dealnews.com/c142/Electronics/",
         "type": "aggregator",
     },
 ]
