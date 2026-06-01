@@ -272,6 +272,45 @@ def test_score_badge_uses_is_lowest_ever_flag(monkeypatch):
     assert flagged - plain == SCORE_WEIGHT_BADGE
 
 
+def test_score_gate_cold_start_is_floor(monkeypatch):
+    """No price history + no engagement → gate = floor (28), since the dormant
+    badge+engagement weights contribute 0 achievable points."""
+    from src import database
+    monkeypatch.setattr(database, "_load_deals",
+                        lambda: [{"is_active": True, "is_posted": False, "asin": "B0A"}])
+    monkeypatch.setattr(database, "_load_price_history", lambda: {})  # no depth
+    monkeypatch.setattr(database, "_safe_load_json", lambda p, d=None: [])
+    # always-on = 20+14+18+8+10 = 70; 0.40*70 = 28 = floor
+    assert database.current_score_gate() == 28.0
+
+
+def test_score_gate_rises_with_full_maturity(monkeypatch):
+    """Full badge coverage + plenty of engagement → gate hits 0.40*100 = 40."""
+    from src import database
+    monkeypatch.setattr(database, "_load_deals",
+                        lambda: [{"is_active": True, "is_posted": False, "asin": "B0A"}])
+    monkeypatch.setattr(database, "_load_price_history",
+                        lambda: {"B0A": [{"price": 1}] * 3})  # full coverage
+    monkeypatch.setattr(database, "_safe_load_json",
+                        lambda p, d=None: [{"engagement_score": 5}] * 10)  # mature
+    assert database.current_score_gate() == 40.0
+
+
+def test_score_gate_coverage_weighted_no_cliff(monkeypatch):
+    """One matured ASIN out of many must NOT flip the whole gate up — it should
+    nudge it only by its coverage fraction (the bug this design prevents)."""
+    from src import database
+    active = [{"is_active": True, "is_posted": False, "asin": f"B0{i}"} for i in range(10)]
+    monkeypatch.setattr(database, "_load_deals", lambda: active)
+    monkeypatch.setattr(database, "_load_price_history",
+                        lambda: {"B00": [{"price": 1}] * 3})  # only 1/10 matured
+    monkeypatch.setattr(database, "_safe_load_json", lambda p, d=None: [])
+    gate = database.current_score_gate()
+    # 1/10 badge coverage → +22*0.1=2.2 → 0.40*72.2 = 28.9, far below the 36.8
+    # cliff that "any ASIN matured" would have produced.
+    assert 28.0 <= gate < 30.0
+
+
 def test_brand_tier_affects_score():
     """A tier-1 brand deal should outscore an identical unknown-brand deal."""
     from src import database

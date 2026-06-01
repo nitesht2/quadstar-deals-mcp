@@ -51,14 +51,19 @@ class GuardResult:
 
 
 def _ctx_from_settings(**overrides) -> GuardContext:
-    """Build a GuardContext with thresholds pulled from config.settings."""
+    """Build a GuardContext with thresholds pulled from config.settings.
+
+    min_score uses the ADAPTIVE gate (database.current_score_gate) so the
+    eligibility bar self-tunes with data maturity rather than a fixed number.
+    """
     from config.settings import (
-        PIPELINE_MIN_DISCOUNT, PIPELINE_MIN_SCORE, PIPELINE_MIN_CONFIDENCE,
+        PIPELINE_MIN_DISCOUNT, PIPELINE_MIN_CONFIDENCE,
         PIPELINE_MAX_DAILY_POSTS, PIPELINE_MAX_PER_CATEGORY_PER_DAY,
     )
+    from src.database import current_score_gate
     ctx = GuardContext(
         min_discount=PIPELINE_MIN_DISCOUNT,
-        min_score=PIPELINE_MIN_SCORE,
+        min_score=current_score_gate(),
         min_confidence=PIPELINE_MIN_CONFIDENCE,
         max_daily=PIPELINE_MAX_DAILY_POSTS,
         max_per_category=PIPELINE_MAX_PER_CATEGORY_PER_DAY,

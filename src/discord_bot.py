@@ -940,8 +940,9 @@ async def _check_pending_reposts():
     while not bot.is_closed():
         await asyncio.sleep(60)
         try:
-            from src.database import get_expired_pending_reposts, score_deal
-            from config.settings import PIPELINE_MIN_SCORE, PIPELINE_MIN_CONFIDENCE, MIN_PRICE_DROP_AUTO_PCT
+            from src.database import get_expired_pending_reposts, score_deal, current_score_gate
+            from config.settings import PIPELINE_MIN_CONFIDENCE, MIN_PRICE_DROP_AUTO_PCT
+            PIPELINE_MIN_SCORE = current_score_gate()  # adaptive gate
             expired = get_expired_pending_reposts()
             for pending in expired:
                 deal = pending.get("deal", {})
@@ -1038,8 +1039,9 @@ async def send_price_drop_card(drop_info: dict, content: dict):
 
             # Send buttons
             view = PriceDropView(asin, drop_info.get("deal_id", 0), plat)
-            from src.database import score_deal as _score_deal
-            from config.settings import PIPELINE_MIN_CONFIDENCE, PIPELINE_MIN_SCORE, MIN_PRICE_DROP_AUTO_PCT
+            from src.database import score_deal as _score_deal, current_score_gate
+            from config.settings import PIPELINE_MIN_CONFIDENCE, MIN_PRICE_DROP_AUTO_PCT
+            PIPELINE_MIN_SCORE = current_score_gate()  # adaptive gate
             _drop_score = _score_deal(deal) if deal else 0
             _content_conf = content.get("confidence", 1.0)
             _all_gates = (

@@ -73,16 +73,16 @@ AMAZON_ONLY = True           # Only show deals with Amazon links (you earn commi
 # Bose/Sony/Apple rarely discount 35%+. Let the score gate be the real quality
 # bar; this just excludes non-deals. NOTE: also set in .env — update both.
 PIPELINE_MIN_DISCOUNT = float(os.getenv("PIPELINE_MIN_DISCOUNT", "15"))
-# 28 — cold-start calibration. badge (22 pts) + engagement (8 pts) = 30 of 100
-# points are STRUCTURALLY 0 until data matures: badge needs >=3 price
-# observations per ASIN (qualifies_as_lowest), engagement needs tweet-performance
-# history — neither exists yet on fresh inventory. So achievable max today is ~70
-# and real deals land 22-42 (measured against the live queue). 28 surfaces the
-# genuinely-decent deals (iPad, Sony XM6, Fire TV, Hisense...) to the agent/human
-# while still dropping the weakest. RAISE THIS toward 40-45 as price_history +
-# engagement accumulate over the coming weeks (the dormant 30 pts come online).
-# Low risk to keep loose: the human-approval gate is the real quality filter now.
+# Score gate is ADAPTIVE — see database.current_score_gate(). It self-tunes with
+# data maturity instead of needing a manual bump, so this value is now just the
+# FLOOR (the gate never drops below it). badge (22) + engagement (8) = 30 pts are
+# structurally 0 on fresh inventory (no price-history depth, no engagement data),
+# so the real gate = PIPELINE_SCORE_GATE_PCT * achievable-points, max'd with this
+# floor. At cold-start: 0.40 * 70 = 28 (= floor). As history accumulates the
+# dormant 30 pts come online -> achievable rises to 100 -> gate auto-rises to 40.
 PIPELINE_MIN_SCORE = float(os.getenv("PIPELINE_MIN_SCORE", "28"))
+# Fraction of currently-achievable score points a deal must clear. 0.40 = 40%.
+PIPELINE_SCORE_GATE_PCT = float(os.getenv("PIPELINE_SCORE_GATE_PCT", "0.40"))
 PIPELINE_MIN_CONFIDENCE = float(os.getenv("PIPELINE_MIN_CONFIDENCE", "0.85"))
 # Max auto-posts to X per calendar day. Best-scored deals post first.
 # Prevents flood during big sales (Prime Day etc). Set 0 to disable cap.

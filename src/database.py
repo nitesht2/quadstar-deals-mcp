@@ -501,6 +501,51 @@ def save_deal(deal: dict) -> bool:
     return True
 
 
+def current_score_gate() -> float:
+    """Adaptive score gate — a fraction of currently-ACHIEVABLE points.
+
+    The badge (lowest-ever) and engagement weights produce 0 until data matures:
+    badge needs >=3 price observations for some ASIN, engagement needs at least
+    one positive tweet-performance record. While those are dormant the achievable
+    max is < 100, so a fixed gate would be too strict at cold-start and too loose
+    later. Instead the gate = PIPELINE_SCORE_GATE_PCT * achievable, floored at
+    PIPELINE_MIN_SCORE. It rises on its own (28 -> 40) as history accumulates —
+    no manual retune. Set PIPELINE_MIN_SCORE in .env to pin a hard floor.
+    """
+    from config.settings import (
+        PIPELINE_MIN_SCORE, PIPELINE_SCORE_GATE_PCT,
+        SCORE_WEIGHT_DISCOUNT, SCORE_WEIGHT_BRAND, SCORE_WEIGHT_PRICE_RANGE,
+        SCORE_WEIGHT_ENGAGEMENT, SCORE_WEIGHT_BADGE, SCORE_WEIGHT_FRESHNESS,
+        SCORE_WEIGHT_TRENDING,
+    )
+    # Always-on factors (produce points on any deal).
+    achievable = (SCORE_WEIGHT_DISCOUNT + SCORE_WEIGHT_BRAND + SCORE_WEIGHT_PRICE_RANGE
+                  + SCORE_WEIGHT_FRESHNESS + SCORE_WEIGHT_TRENDING)
+
+    # The dormant factors (badge, engagement) are COVERAGE-WEIGHTED by the live
+    # queue: a factor that only fires for a fraction of current candidates only
+    # raises the gate by that fraction. This avoids a cliff where one matured
+    # ASIN flips the whole gate up and re-starves the queue.
+    try:
+        active = [d for d in _load_deals() if d.get("is_active") and not d.get("is_posted")]
+        asins = [d.get("asin") for d in active if d.get("asin")]
+        if asins:
+            hist = _load_price_history()
+            badge_cov = sum(1 for a in asins if len(hist.get(a, [])) >= 3) / len(asins)
+            achievable += SCORE_WEIGHT_BADGE * badge_cov
+    except Exception:
+        pass
+    # Engagement: small factor (8 pts), scale by how much positive history exists
+    # relative to a "mature" base of ~10 records. Caps at full weight.
+    try:
+        perf = _safe_load_json(os.path.join(DATA_DIR, "tweet_performance.json"), [])
+        pos = sum(1 for r in perf if (r.get("engagement_score") or 0) > 0)
+        achievable += SCORE_WEIGHT_ENGAGEMENT * min(1.0, pos / 10.0)
+    except Exception:
+        pass
+    return round(max(PIPELINE_MIN_SCORE, PIPELINE_SCORE_GATE_PCT * achievable), 1)
+
+
 def _title_has_brand(title_lower: str, brands: list[str]) -> bool:
     """True if any brand appears as a whole word/token in the title.
 

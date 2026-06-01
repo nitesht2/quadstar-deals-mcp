@@ -454,13 +454,15 @@ def _run_pipeline(limit: int = 10) -> str:
     from src.postiz_client import get_smart_time
     from src import postiz_client
     from config.settings import (
-        PIPELINE_MIN_DISCOUNT, PIPELINE_MIN_SCORE, PIPELINE_MIN_CONFIDENCE,
+        PIPELINE_MIN_DISCOUNT, PIPELINE_MIN_CONFIDENCE,
         ASIN_REPOST_COOLDOWN_DAYS, PIPELINE_MAX_DAILY_POSTS,
         PIPELINE_MAX_PER_CATEGORY_PER_DAY,
     )
     from src.database import (
         get_watchlist_asins, get_posts_today_count, get_category_posts_today,
+        current_score_gate,
     )
+    PIPELINE_MIN_SCORE = current_score_gate()  # adaptive gate (cold-start aware)
 
     stats = cleanup_deals()
     if stats.get("expired", 0) > 0:
