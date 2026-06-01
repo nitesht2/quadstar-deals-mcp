@@ -277,7 +277,13 @@ def _schedule_deal(deal_id: int, scheduled_at: str = None, platform: str = None)
         return f"Deal {deal_id} not found"
     if _is_deal_stale(deal):
         return "expired"
-    content = generate_deal_content(deal)
+    # Prefer the agent's stored copy (what the human saw on the approval card)
+    # over a fresh regeneration, so Approve posts exactly what was reviewed.
+    if deal.get("hermes_tweet_1"):
+        content = {"tweet_1": deal["hermes_tweet_1"], "tweet_2": deal.get("hermes_tweet_2", ""),
+                   "linkedin_post": deal.get("hermes_linkedin", ""), "confidence": 1.0}
+    else:
+        content = generate_deal_content(deal)
 
     if platform:
         # Schedule to a single platform

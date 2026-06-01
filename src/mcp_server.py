@@ -98,18 +98,19 @@ def get_candidate_deals(limit: int = 10) -> str:
 
 
 @mcp.tool()
-def schedule_deal(deal_id: int, platforms: str = "", scheduled_at: str = "",
-                  copy_json: str = "") -> str:
-    """Post ONE deal you chose — through the un-bypassable guard cage (JSON result).
+def propose_deal(deal_id: int, scheduled_at: str = "", copy_json: str = "") -> str:
+    """PROPOSE ONE deal you chose for HUMAN APPROVAL (JSON result). Nothing posts.
 
-    You decide: which deal_id (from get_candidate_deals), the platforms (comma
-    list, empty = auto-route), scheduled_at (ISO 8601 UTC, empty = smart time),
-    and optionally your own voice copy_json {"tweet_1","tweet_2","linkedin_post"}.
-    The backend enforces guards server-side FIRST — dedup, affiliate tag, daily +
-    per-category caps, content confidence, LIVE Amazon price re-verify. If a guard
-    fails it REFUSES with {ok:false, code, reason} so you can learn and pick
-    another. You cannot bypass the cage. On success: {ok:true, scheduled_at, ...}."""
-    return _via_service("schedule_deal", deal_id=deal_id, platforms=platforms,
+    You decide which deal_id (from get_candidate_deals), a suggested scheduled_at
+    (ISO 8601 UTC, optional — the human can change it), and optionally your own
+    voice copy_json {"tweet_1","tweet_2","linkedin_post"}. The backend validates
+    the deal through the guard cage (dedup, affiliate tag, content confidence,
+    LIVE Amazon price re-verify) and then sends a Discord APPROVAL card with
+    approve / reject / pick-time buttons. The HUMAN approves before anything goes
+    live. If a guard fails it REFUSES with {ok:false, code, reason} so you pick
+    another deal. On success: {ok:true, code:"proposed"}. You do NOT post directly
+    — you propose; the human approves."""
+    return _via_service("propose_deal", deal_id=deal_id,
                         scheduled_at=scheduled_at, copy_json=copy_json)
 
 

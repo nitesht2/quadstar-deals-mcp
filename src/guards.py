@@ -110,11 +110,16 @@ def eligibility(deal: dict, ctx: GuardContext, _perf_records=None) -> GuardResul
 
 
 def enforce_guards(deal: dict, content: dict | None, ctx: GuardContext,
-                   verify_price: bool = True) -> GuardResult:
+                   verify_price: bool = True, check_caps: bool = True) -> GuardResult:
     """HARD invariants — the cage. Run before ANY post, by ANY caller.
 
     Order is cheap-checks-first so we only pay the network price-verify when
     everything else already passed. Returns the first violation.
+
+    check_caps=False for the PROPOSE path (human-approval): proposing more cards
+    than the daily cap is fine — the human approves at most `max_daily` of them,
+    and the caps are re-enforced at approve/schedule time. Caps gate POSTS, not
+    proposals.
     """
     # 1. Idempotency — never repost the same deal.
     if deal.get("is_posted"):
@@ -124,16 +129,15 @@ def enforce_guards(deal: dict, content: dict | None, ctx: GuardContext,
     if not affiliate_tag_present(deal):
         return GuardResult(False, "no_affiliate_tag", "affiliate tag missing from URL")
 
-    # 3. Daily volume cap.
-    if ctx.max_daily > 0 and ctx.posts_today >= ctx.max_daily:
-        return GuardResult(False, "daily_cap",
-                           f"daily cap reached ({ctx.posts_today}/{ctx.max_daily})")
-
-    # 4. Per-category cap — feed variety.
-    cat = deal.get("category") or "tech"
-    if ctx.max_per_category > 0 and ctx.cat_counts.get(cat, 0) >= ctx.max_per_category:
-        return GuardResult(False, "category_cap",
-                           f"category '{cat}' cap reached ({ctx.cat_counts.get(cat,0)}/{ctx.max_per_category})")
+    # 3+4. Volume caps — only at post time, not propose time.
+    if check_caps:
+        if ctx.max_daily > 0 and ctx.posts_today >= ctx.max_daily:
+            return GuardResult(False, "daily_cap",
+                               f"daily cap reached ({ctx.posts_today}/{ctx.max_daily})")
+        cat = deal.get("category") or "tech"
+        if ctx.max_per_category > 0 and ctx.cat_counts.get(cat, 0) >= ctx.max_per_category:
+            return GuardResult(False, "category_cap",
+                               f"category '{cat}' cap reached ({ctx.cat_counts.get(cat,0)}/{ctx.max_per_category})")
 
     # 5. Content present + confident.
     if content is not None:

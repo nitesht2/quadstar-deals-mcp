@@ -1,15 +1,16 @@
-"""Unit tests for the agentic primitives in src.agent.
+"""Unit tests for the agentic primitives in src.agent (human-approval model).
 
-Verifies the core "agent decides, code enforces" contract:
-- schedule_deal REFUSES when the guard cage fails (and does not post)
-- schedule_deal posts when the cage passes, honoring agent-supplied copy
+Contract: the agent PROPOSES (sends an approval card); nothing auto-posts.
+- propose_deal REFUSES when the guard cage fails (no card sent)
+- propose_deal sends an approval card when the cage passes (no schedule, no mark-posted)
+- propose_deal honors agent-supplied copy
 - get_candidate_deals returns a scored menu WITHOUT gating anything out
-All external deps (DB, Postiz, notifier, guards) are mocked — no network.
+All external deps (DB, Postiz, notifier, guards, Discord) are mocked — no network.
 """
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -25,16 +26,15 @@ def _deal(**over):
 
 
 def _common_patches(stack, deal):
-    """Patch the shared DB/context deps schedule_deal pulls in."""
     stack.enter_context(patch("src.database.get_deal_by_id", return_value=deal))
     stack.enter_context(patch("src.database.get_posts_today_count", return_value=0))
     stack.enter_context(patch("src.database.get_category_posts_today", return_value={}))
     stack.enter_context(patch("src.database.get_watchlist_asins", return_value=[]))
-    stack.enter_context(patch.object(agent, "_get_bot_loop", return_value=None))
+    stack.enter_context(patch("src.database.update_deal"))
 
 
-def test_schedule_deal_refuses_when_guard_fails():
-    """Guard cage returns not-ok → no post, structured refusal with the code."""
+def test_propose_refuses_when_guard_fails():
+    """Cage fails → no approval card, structured refusal with the code."""
     from contextlib import ExitStack
     with ExitStack() as s:
         _common_patches(s, _deal())
@@ -42,15 +42,15 @@ def test_schedule_deal_refuses_when_guard_fails():
                               return_value={"tweet_1": "hi", "confidence": 1.0}))
         s.enter_context(patch("src.guards.enforce_guards",
                               return_value=guards.GuardResult(False, "price_unverified", "mismatch")))
-        sched = s.enter_context(patch("src.postiz_client.schedule_post"))
-        marked = s.enter_context(patch("src.database.mark_as_posted"))
-        out = json.loads(agent._schedule_deal(42))
+        s.enter_context(patch.object(agent, "_get_bot_loop", return_value=MagicMock()))
+        card = s.enter_context(patch("src.discord_bot.send_deal_card"))
+        out = json.loads(agent._propose_deal(42))
     assert out["ok"] is False and out["code"] == "price_unverified"
-    sched.assert_not_called()
-    marked.assert_not_called()
+    card.assert_not_called()
 
 
-def test_schedule_deal_posts_when_guard_passes():
+def test_propose_sends_card_when_guard_passes():
+    """Cage passes → approval card sent; NOTHING scheduled or marked posted."""
     from contextlib import ExitStack
     with ExitStack() as s:
         _common_patches(s, _deal())
@@ -58,50 +58,47 @@ def test_schedule_deal_posts_when_guard_passes():
                               return_value={"tweet_1": "hook", "tweet_2": "link", "confidence": 1.0}))
         s.enter_context(patch("src.guards.enforce_guards",
                               return_value=guards.GuardResult(True, "ok", "passed")))
-        s.enter_context(patch("src.platform_router.select_platforms", return_value=["twitter"]))
-        s.enter_context(patch("src.postiz_client.get_smart_time",
-                              return_value=("2026-06-02T17:00:00.000Z", "5pm PT")))
-        s.enter_context(patch("src.postiz_client.schedule_post", return_value={"status": "ok"}))
-        s.enter_context(patch("src.postiz_client.extract_postiz_id", return_value="pz1"))
+        s.enter_context(patch.object(agent, "_get_bot_loop", return_value=MagicMock()))
+        s.enter_context(patch("asyncio.run_coroutine_threadsafe"))
+        card = s.enter_context(patch("src.discord_bot.send_deal_card"))
+        sched = s.enter_context(patch("src.postiz_client.schedule_post"))
         marked = s.enter_context(patch("src.database.mark_as_posted"))
-        s.enter_context(patch("src.tweet_learner.record_tweet"))
-        out = json.loads(agent._schedule_deal(42, platforms="twitter"))
-    assert out["ok"] is True and out["code"] == "scheduled"
-    assert out["scheduled_at"] == "2026-06-02T17:00:00.000Z"
-    marked.assert_called_once_with(42)
+        out = json.loads(agent._propose_deal(42))
+    assert out["ok"] is True and out["code"] == "proposed"
+    card.assert_called_once()
+    sched.assert_not_called()   # propose never schedules
+    marked.assert_not_called()  # propose never marks posted
 
 
-def test_schedule_deal_uses_agent_copy():
-    """When the agent supplies copy_json, that voice is used verbatim (not the LLM)."""
+def test_propose_persists_agent_copy():
+    """Agent copy_json is stored on the deal so Approve uses what the human saw."""
     from contextlib import ExitStack
-    captured = {}
-    def _capture(deal, content, platforms, scheduled_at=None):
-        captured["content"] = content
-        return {"status": "ok"}
     with ExitStack() as s:
-        _common_patches(s, _deal())
-        gen = s.enter_context(patch("src.notifier.generate_deal_content"))
+        s.enter_context(patch("src.database.get_deal_by_id", return_value=_deal()))
+        s.enter_context(patch("src.database.get_posts_today_count", return_value=0))
+        s.enter_context(patch("src.database.get_category_posts_today", return_value={}))
+        s.enter_context(patch("src.database.get_watchlist_asins", return_value=[]))
+        upd = s.enter_context(patch("src.database.update_deal"))
+        s.enter_context(patch("src.notifier.generate_deal_content"))
         s.enter_context(patch("src.guards.enforce_guards",
                               return_value=guards.GuardResult(True, "ok", "passed")))
-        s.enter_context(patch("src.platform_router.select_platforms", return_value=["twitter"]))
-        s.enter_context(patch("src.postiz_client.get_smart_time", return_value=("t", "l")))
-        s.enter_context(patch("src.postiz_client.schedule_post", side_effect=_capture))
-        s.enter_context(patch("src.postiz_client.extract_postiz_id", return_value="pz1"))
-        s.enter_context(patch("src.database.mark_as_posted"))
-        s.enter_context(patch("src.tweet_learner.record_tweet"))
-        agent._schedule_deal(42, copy_json=json.dumps({"tweet_1": "AGENT HOOK", "tweet_2": "x"}))
-    assert captured["content"]["tweet_1"] == "AGENT HOOK"
-    gen.assert_not_called()  # agent copy used, backend LLM skipped
+        s.enter_context(patch.object(agent, "_get_bot_loop", return_value=MagicMock()))
+        s.enter_context(patch("asyncio.run_coroutine_threadsafe"))
+        s.enter_context(patch("src.discord_bot.send_deal_card"))
+        agent._propose_deal(42, copy_json=json.dumps({"tweet_1": "AGENT HOOK", "tweet_2": "x"}))
+    # update_deal called with the agent copy stored as hermes_tweet_1
+    patches = [c.args[1] for c in upd.call_args_list if len(c.args) > 1]
+    assert any(p.get("hermes_tweet_1") == "AGENT HOOK" and p.get("copy_source") == "hermes"
+               for p in patches)
 
 
-def test_schedule_deal_not_found():
+def test_propose_not_found():
     with patch("src.database.get_deal_by_id", return_value=None):
-        out = json.loads(agent._schedule_deal(999))
+        out = json.loads(agent._propose_deal(999))
     assert out["ok"] is False and out["code"] == "not_found"
 
 
 def test_get_candidate_deals_returns_menu_without_gating():
-    """Menu includes a sub-min-discount deal (not dropped) flagged ineligible."""
     deals = [
         _deal(id=1, discount_pct=40, title="Big Discount"),
         _deal(id=2, discount_pct=5, title="Thin Discount"),
@@ -111,6 +108,6 @@ def test_get_candidate_deals_returns_menu_without_gating():
          patch("src.database.get_watchlist_asins", return_value=[]), \
          patch("src.database._safe_load_json", return_value=[]):
         out = json.loads(agent._get_candidate_deals(10))
-    assert len(out) == 2  # nothing gated out
+    assert len(out) == 2
     thin = next(d for d in out if d["id"] == 2)
-    assert thin["eligible"] is False  # flagged, but still present for the agent to judge
+    assert thin["eligible"] is False

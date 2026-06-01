@@ -354,26 +354,26 @@ def _get_candidate_deals(limit: int = 10) -> str:
     return json.dumps(out)
 
 
-def _schedule_deal(deal_id: int, platforms: str = "", scheduled_at: str = "",
-                   copy_json: str = "") -> str:
-    """Agentic primitive: post ONE agent-chosen deal — through the hard cage.
+def _propose_deal(deal_id: int, scheduled_at: str = "", copy_json: str = "") -> str:
+    """Agentic primitive: PROPOSE ONE agent-chosen deal for human approval.
 
-    The agent decides WHICH deal, WHEN (scheduled_at ISO, or smart default), the
-    PLATFORMS, and may supply its own voice COPY (copy_json = {"tweet_1","tweet_2",
-    "linkedin_post"}). This function does NOT trust that judgment blindly: it runs
-    guards.enforce_guards() server-side first (dedup, affiliate tag, daily +
-    per-category caps, content confidence, LIVE price re-verify). On any violation
-    it REFUSES and returns the machine code + reason so the agent can learn and
-    pick a different deal. The agent cannot bypass the cage.
+    NOTHING goes live here. The agent decides WHICH deal and may supply its own
+    voice COPY (copy_json = {"tweet_1","tweet_2","linkedin_post"}); this runs the
+    cage to confirm the deal is currently postable (dedup, affiliate tag, content
+    confidence, LIVE price re-verify — but NOT the daily/category caps, which gate
+    actual posts), then sends a Discord APPROVAL card with approve/reject/pick-time
+    buttons. The human approves → the bot's own _schedule_deal posts it. On any
+    cage violation it REFUSES with the code + reason so the agent picks another.
+
+    schedule_at is stored as the agent's suggested time; the human can override it
+    via the Pick Time button. Returns {ok, code, reason}.
     """
     from src.database import (
-        get_deal_by_id, mark_as_posted, get_posts_today_count,
-        get_category_posts_today, get_watchlist_asins,
+        get_deal_by_id, get_posts_today_count, get_category_posts_today,
+        get_watchlist_asins, update_deal,
     )
     from src.notifier import generate_deal_content
-    from src.platform_router import select_platforms
-    from src.postiz_client import get_smart_time
-    from src import postiz_client, guards
+    from src import guards
     from config.settings import ASIN_REPOST_COOLDOWN_DAYS
 
     deal = get_deal_by_id(deal_id)
@@ -393,44 +393,47 @@ def _schedule_deal(deal_id: int, platforms: str = "", scheduled_at: str = "",
     if content is None:
         content = generate_deal_content(deal)
 
-    # Build the cage context from live state.
+    # Cage at PROPOSE time: validate postability + live price, but NOT the caps
+    # (the human approves at most max_daily; caps re-enforce at approve/schedule).
     ctx = guards._ctx_from_settings(
         posts_today=get_posts_today_count(),
         cat_counts=get_category_posts_today(),
         recent_asins=set(get_watchlist_asins(days=ASIN_REPOST_COOLDOWN_DAYS)),
     )
-
-    verdict = guards.enforce_guards(deal, content, ctx)
+    verdict = guards.enforce_guards(deal, content, ctx, check_caps=False)
     if not verdict.ok:
         return json.dumps({"ok": False, "code": verdict.code, "reason": verdict.reason,
                            "deal_id": deal_id, "title": deal.get("title", "")[:60]})
 
-    # Cage passed — the agent's decision is allowed. Post it.
-    platform_list = [p.strip() for p in platforms.split(",") if p.strip()] or select_platforms(deal)
-    sched = scheduled_at.strip() or get_smart_time()[0]
-    result = postiz_client.schedule_post(deal, content, platform_list, scheduled_at=sched)
-    if result.get("status") != "ok":
-        return json.dumps({"ok": False, "code": "postiz_failed",
-                           "reason": result.get("reason", "schedule failed"), "deal_id": deal_id})
+    # Persist the agent's copy + suggested time so the APPROVE handler uses the
+    # exact copy the human saw (not a fresh regeneration), and the card can label
+    # the time. copy_source marks it as the agent's voice.
+    patch = {}
+    if copy_json and content.get("tweet_1"):
+        patch.update({
+            "hermes_tweet_1": content["tweet_1"], "hermes_tweet_2": content.get("tweet_2", ""),
+            "hermes_linkedin": content.get("linkedin_post", ""), "copy_source": "hermes",
+        })
+    if scheduled_at.strip():
+        patch["schedule_at"] = scheduled_at.strip()
+    if patch:
+        update_deal(deal_id, patch)
 
-    mark_as_posted(deal_id)
-    from src.tweet_learner import record_tweet
-    record_tweet(deal_id, content["tweet_1"], postiz_client.extract_postiz_id(result), sched)
-
-    # Best-effort Discord card (never blocks the post).
+    # Send the APPROVAL card (approve / reject / pick-time / skip buttons).
     loop = _get_bot_loop()
-    if loop:
-        import asyncio
-        from src.discord_bot import send_auto_approved_notification
-        try:
-            asyncio.run_coroutine_threadsafe(
-                send_auto_approved_notification(deal, content, sched, platform_list), loop)
-        except Exception as exc:
-            print(f"  [schedule_deal] card send failed: {exc}")
+    if not loop:
+        return json.dumps({"ok": False, "code": "bot_not_ready",
+                           "reason": "Discord bot loop not available — cannot send approval card"})
+    import asyncio
+    from src.discord_bot import send_deal_card
+    try:
+        asyncio.run_coroutine_threadsafe(send_deal_card(deal, content), loop)
+    except Exception as exc:
+        return json.dumps({"ok": False, "code": "card_failed", "reason": str(exc), "deal_id": deal_id})
 
-    return json.dumps({"ok": True, "code": "scheduled", "deal_id": deal_id,
-                       "title": deal.get("title", "")[:60], "platforms": platform_list,
-                       "scheduled_at": sched})
+    return json.dumps({"ok": True, "code": "proposed", "deal_id": deal_id,
+                       "title": deal.get("title", "")[:60],
+                       "note": "approval card sent — awaiting human approve/reject"})
 
 
 def _run_pipeline(limit: int = 10) -> str:

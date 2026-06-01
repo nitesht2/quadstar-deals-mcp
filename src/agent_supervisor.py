@@ -1,25 +1,27 @@
 """agent_supervisor.py — reliability harness around the (flaky) Hermes agent.
 
-The agentic runtime, made safe to be load-bearing. One supervised cycle:
+The agentic runtime, made safe to be load-bearing. Human-approval model —
+NOTHING auto-posts; the agent PROPOSES, the human approves. One supervised cycle:
 
   1. SCRAPE   — backend pulls inventory (reliable Scrapling), via the service.
-  2. AGENT    — run Hermes (judgment: read candidates, choose, write voice copy,
-                schedule_deal). Subprocess, hard timeout.
-  3. VERIFY   — did the agent actually post? Snapshot posts-today before/after.
-  4. FALLBACK — if the agent posted nothing BUT eligible candidates exist, it
-                no-showed (cheap models drop tool calls) → run the deterministic
-                run_pipeline so the cycle never goes empty. If nothing was
-                eligible, silence is correct — no fallback.
+  2. AGENT    — run Hermes (judgment: read candidates, choose, propose_deal which
+                sends a Discord approval card). Subprocess, hard timeout.
+  3. VERIFY   — did the agent genuinely run (clean exit + substantive output)?
+  4. FALLBACK — only if the agent truly FAILED (empty/crash/timeout) AND eligible
+                inventory exists, propose deterministically (generate_and_send_cards)
+                so the human still gets approval cards. Else respect the agent /
+                stay silent. No path auto-posts.
 
-This is "agent decides, code guarantees": the agent gets full judgment, but a
-deterministic path catches its failures. Net: agentic AND reliable.
+This is "agent decides, human approves, code guarantees the cards": the agent
+gets full judgment, a deterministic path covers its failures, and every post
+passes a human gate. Net: agentic, reliable, and human-approved.
 
 Run by cron (replaces the raw `hermes -z` mission runner):
     python -m src.agent_supervisor
 Env:
     QUADSTAR_SERVICE_URL   backend base (default http://127.0.0.1:8001)
     HERMES_BIN             hermes binary (default /usr/local/bin/hermes)
-    HERMES_MODEL           model (default openrouter/deepseek/deepseek-v4-flash)
+    HERMES_MODEL           model (default deepseek/deepseek-chat)
     HERMES_MISSION_FILE    mission text path (default /opt/quadstar-deals/.hermes-mission.txt)
     AGENT_TIMEOUT_SECS     subprocess cap (default 900)
 """
@@ -55,17 +57,9 @@ def _service(tool: str, **payload) -> str:
         return ""
 
 
-def _posts_today() -> int:
-    try:
-        r = requests.get(f"{SERVICE_URL}/status", timeout=15)
-        return int(r.json().get("today", {}).get("posted", 0))
-    except Exception:
-        return 0
-
-
 def _count_eligible() -> int:
     """How many candidate deals the deterministic gate considers postable now.
-    This is the verification signal: if >0 and the agent posted 0, it no-showed."""
+    Used only to decide whether a FAILED agent warrants a fallback proposal."""
     raw = _service("get_candidate_deals", limit=25)
     if not raw:
         return 0
@@ -117,42 +111,39 @@ def _run_agent() -> tuple[bool, bool]:
 
 
 def run_cycle(scrape: bool = True) -> dict:
-    """One supervised agentic cycle. Returns a structured outcome dict."""
+    """One supervised agentic cycle (human-approval model). Returns an outcome dict.
+
+    Nothing auto-posts: the agent PROPOSES deals (Discord approval cards), the
+    human approves. Verification is "did the agent run and propose?" — not "did
+    it post". The deterministic fallback also PROPOSES (generate_and_send_cards)
+    so the human still gets cards if the agent truly failed.
+    """
     if scrape:
         print(f"  [supervisor] scrape: {_service('scrape', category='tech')}", flush=True)
 
-    before = _posts_today()
     ran_clean, has_output = _run_agent()
-    after = _posts_today()
-    posted_by_agent = max(0, after - before)
     agent_ran = ran_clean and has_output  # genuinely ran (not empty / crash / hang)
 
-    outcome = {"agent_ran": agent_ran, "posted_by_agent": posted_by_agent,
-               "fallback_used": False, "fallback_result": ""}
+    outcome = {"agent_ran": agent_ran, "fallback_used": False, "fallback_result": ""}
 
-    if posted_by_agent > 0:
-        outcome["status"] = "agent_posted"
-        print(f"  [supervisor] agent posted {posted_by_agent} — agent-driven, done", flush=True)
-        return outcome
-
-    # Agent posted 0. Respect its DECISION if it genuinely ran — it may have
-    # declined junk/stale inventory (a valid judgment). Fall back ONLY when the
-    # agent truly FAILED (empty output / crash / timeout) and deals were postable.
+    # Agent ran → respect its judgment (it proposed cards, or declined junk/stale).
     if agent_ran:
-        outcome["status"] = "agent_declined"
-        print("  [supervisor] agent ran and posted 0 — respecting its decision (no fallback)", flush=True)
+        outcome["status"] = "agent_ran"
+        print("  [supervisor] agent ran — proposals (if any) sent for approval; done", flush=True)
         return outcome
 
+    # Agent truly FAILED. Propose deterministically so the human still gets cards
+    # to approve — but only if there's eligible inventory.
     eligible = _count_eligible()
     if eligible == 0:
         outcome["status"] = "correctly_silent"
-        print("  [supervisor] agent failed but 0 eligible — nothing lost", flush=True)
+        print("  [supervisor] agent failed but 0 eligible — nothing to propose", flush=True)
         return outcome
 
-    print(f"  [supervisor] agent FAILED (no output/crash), {eligible} eligible → deterministic fallback", flush=True)
+    print(f"  [supervisor] agent FAILED (no output/crash), {eligible} eligible → fallback proposes cards", flush=True)
     outcome["fallback_used"] = True
-    outcome["fallback_result"] = _service("run_pipeline", limit=10)
-    outcome["status"] = "fallback"
+    outcome["fallback_result"] = _service("generate_and_send_cards", limit=3)
+    outcome["status"] = "fallback_proposed"
     return outcome
 
 
