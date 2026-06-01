@@ -107,7 +107,7 @@
   </div>
   <div class="arrow">&#8595; curl POST &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &#8595; curl POST &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &#8595; button callback</div>
   <div class="arch-row">
-    <div class="node agent" style="min-width: 380px;"><div class="label">FastAPI + LangGraph ReAct Agent (port 8001)</div><div class="detail">7 tools: scrape, cards, schedule, feedback, status, categories</div></div>
+    <div class="node agent" style="min-width: 380px;"><div class="label">FastAPI Backend + Hermes Agent (port 8001)</div><div class="detail">7 tools: scrape, cards, schedule, feedback, status, categories</div></div>
   </div>
   <div class="arrow">&#8595;</div>
   <div class="arch-row">
@@ -137,7 +137,7 @@
     <div class="step-line"><div class="step-num" style="background:#00ff88;">2</div><div class="step-tail"></div></div>
     <div class="step-body">
       <h4>Agent Decides</h4>
-      <p>LangGraph ReAct agent receives the command. It autonomously plans which tools to call and in what order based on the natural language input.</p>
+      <p>The Hermes agent plans which tools to call and in what order; the backend's tool_router classifies each command (one LLM call) and dispatches directly to the matching tool.</p>
       <span class="tag ai">Agentic (AI decides)</span>
     </div>
   </div>
@@ -192,7 +192,7 @@
       <div class="flow-node fn-trigger">Cron / @mention</div><span class="flow-arrow">&#8594;</span>
       <div class="flow-node fn-process">OpenClaw Agent</div><span class="flow-arrow">&#8594;</span>
       <div class="flow-node fn-process">FastAPI</div><span class="flow-arrow">&#8594;</span>
-      <div class="flow-node fn-process">LangGraph Agent</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">tool_router</div><span class="flow-arrow">&#8594;</span>
       <div class="flow-node fn-external">Amazon Scrape</div><span class="flow-arrow">&#8594;</span>
       <div class="flow-node fn-output">Discord Cards</div>
     </div>
@@ -202,7 +202,7 @@
     <div class="flow-row">
       <div class="flow-node fn-decision">Click Approve</div><span class="flow-arrow">&#8594;</span>
       <div class="flow-node fn-process">discord.py</div><span class="flow-arrow">&#8594;</span>
-      <div class="flow-node fn-process">LangGraph Agent</div><span class="flow-arrow">&#8594;</span>
+      <div class="flow-node fn-process">tool_router</div><span class="flow-arrow">&#8594;</span>
       <div class="flow-node fn-output">Postiz API</div><span class="flow-arrow">&#8594;</span>
       <div class="flow-node fn-external">@quadstardeals</div>
     </div>

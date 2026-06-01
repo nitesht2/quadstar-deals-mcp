@@ -460,7 +460,7 @@
   <p style="margin-top:10px">
     <span class="badge badge-green">Live · Kimi K2</span>
     <span class="badge badge-blue">launchd · port 8002</span>
-    <span class="badge badge-purple">LangGraph ReAct Agent</span>
+    <span class="badge badge-purple">Hermes Agent</span>
   </p>
   <p style="margin-top:12px">Automated Amazon affiliate deal scraper → LLM copywriter → Discord approval → Twitter/X publisher</p>
 </header>
@@ -483,9 +483,9 @@
 
     <div class="pipe-node node-agent">
       <div class="step">Step 2</div>
-      <div class="title">LangGraph Agent</div>
+      <div class="title">Hermes Agent + tool_router</div>
       <div class="file">agent.py</div>
-      <div class="desc">ReAct loop. Plans tool calls: feedback → scrape → notify.</div>
+      <div class="desc">Hermes plans tool calls (feedback → scrape → notify); tool_router classifies + dispatches each one directly.</div>
     </div>
 
     <div class="pipe-arrow">›</div>
@@ -551,12 +551,12 @@
     <div class="card-header">
       <div class="card-icon">🤖</div>
       <div>
-        <div class="card-title">LangGraph ReAct Agent</div>
+        <div class="card-title">Hermes Agent + tool_router</div>
         <div class="card-file">src/agent.py</div>
       </div>
     </div>
     <ul>
-      <li><strong>ReAct loop</strong> — reasons about which tool to call next</li>
+      <li><strong>Deterministic dispatch</strong> — one LLM classify call, then a direct tool call (planning lives in Hermes)</li>
       <li><strong>Tools:</strong> scrape deals, send cards, collect feedback, check engagement, get status</li>
       <li>Runs on-demand from API or terminal via <code style="font-size:0.7rem">python -m src.main</code></li>
       <li>LLM backend via <strong>llm.py</strong> abstraction (currently Kimi K2)</li>
