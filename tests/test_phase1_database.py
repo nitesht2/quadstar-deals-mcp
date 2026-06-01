@@ -226,6 +226,52 @@ def test_get_category_posts_today_groups_by_category(monkeypatch):
     assert counts == {"tech": 3, "home": 1}
 
 
+def _hist(*prices):
+    """Build a price_history entry list with recent dates."""
+    from datetime import datetime
+    now = datetime.now().isoformat()
+    return [{"price": p, "date": now} for p in prices]
+
+
+def test_qualifies_as_lowest_needs_minimum_observations(monkeypatch):
+    """Thin history (< min_observations) can never be 'lowest ever'."""
+    from src import database
+    monkeypatch.setattr(database, "get_price_history", lambda asin: _hist(100.0))
+    # Even though 90 <= 100, only 1 observation → not enough to claim lowest
+    assert database.qualifies_as_lowest("B0X", 90.0, min_observations=3) is False
+
+
+def test_qualifies_as_lowest_true_when_below_prior_history(monkeypatch):
+    from src import database
+    monkeypatch.setattr(database, "get_price_history", lambda asin: _hist(120.0, 110.0, 115.0))
+    assert database.qualifies_as_lowest("B0X", 100.0, min_observations=3) is True
+
+
+def test_qualifies_as_lowest_false_when_not_lowest(monkeypatch):
+    from src import database
+    monkeypatch.setattr(database, "get_price_history", lambda asin: _hist(120.0, 90.0, 115.0))
+    assert database.qualifies_as_lowest("B0X", 100.0, min_observations=3) is False
+
+
+def test_qualifies_as_lowest_empty_history(monkeypatch):
+    from src import database
+    monkeypatch.setattr(database, "get_price_history", lambda asin: [])
+    assert database.qualifies_as_lowest("B0X", 50.0) is False
+
+
+def test_score_badge_uses_is_lowest_ever_flag(monkeypatch):
+    """The lowest-ever badge must come from the persisted flag, not a live check
+    (the old live is_lowest_price fired for every deal post-record)."""
+    from src import database
+    monkeypatch.setattr(database, "get_price_history", lambda asin: [])  # no live lowest
+    base = {"discount_pct": 20, "deal_price": 200, "asin": "B0Y",
+            "scraped_at": "2026-04-14T12:00:00", "title": "Generic Gadget"}
+    flagged = database.score_deal({**base, "is_lowest_ever": True}, _perf_records=[])
+    plain = database.score_deal({**base, "is_lowest_ever": False}, _perf_records=[])
+    from config.settings import SCORE_WEIGHT_BADGE
+    assert flagged - plain == SCORE_WEIGHT_BADGE
+
+
 def test_brand_tier_affects_score():
     """A tier-1 brand deal should outscore an identical unknown-brand deal."""
     from src import database

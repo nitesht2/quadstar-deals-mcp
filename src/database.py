@@ -211,6 +211,33 @@ def is_lowest_in_n_days(asin: str, current_price: float, days: int = 90) -> bool
     return current_price <= min(recent)
 
 
+def qualifies_as_lowest(asin: str, price: float, min_observations: int = 3, days: int = 90) -> bool:
+    """Authoritative 'lowest ever' check — call BEFORE record_price().
+
+    Distinct from is_lowest_price(): that one returns True the instant the
+    current price is in history (so calling it AFTER record_price crowns every
+    deal). This compares `price` against PRIOR observations only and requires at
+    least `min_observations` of them, so a thin-data or first-seen ASIN can never
+    be called "lowest ever". Returns False until real history accumulates.
+    """
+    if not asin or not price or price <= 0:
+        return False
+    entries = get_price_history(asin)
+    if len(entries) < min_observations:
+        return False
+    cutoff = datetime.now() - timedelta(days=days)
+    recent = []
+    for e in entries:
+        try:
+            if datetime.fromisoformat(e["date"]) >= cutoff:
+                recent.append(e["price"])
+        except (ValueError, TypeError, KeyError):
+            continue
+    if len(recent) < min_observations:
+        return False
+    return price <= min(recent)
+
+
 def get_original_posted_price(asin: str) -> float | None:
     """Get the price at which a deal was originally posted. Used for 'was $X when we posted it'."""
     deals = _load_deals()
@@ -448,13 +475,15 @@ def save_deal(deal: dict) -> bool:
     if deal.get("category", "tech") in ("tech", "", None):
         deal["category"] = _refine_category(deal.get("title", ""))
 
+    # Determine "lowest ever" BEFORE recording the current price — otherwise the
+    # just-recorded price pollutes the comparison and every deal looks lowest.
+    # Requires real prior history (>= min_observations) so a first-seen ASIN
+    # isn't falsely crowned. This is authoritative; score_deal reads the flag.
+    deal["is_lowest_ever"] = qualifies_as_lowest(deal.get("asin", ""), deal.get("deal_price", 0))
+
     # Record price history
     if deal.get("asin") and deal.get("deal_price"):
         record_price(deal["asin"], deal["deal_price"])
-
-    # Check if this is the lowest price we've tracked
-    if deal.get("asin") and is_lowest_price(deal["asin"], deal.get("deal_price", 0)):
-        deal["is_lowest_ever"] = True
 
     deal["id"] = max((d.get("id", 0) for d in deals), default=0) + 1
     deal["scraped_at"] = datetime.now().isoformat()
@@ -530,14 +559,15 @@ def score_deal(deal: dict, _perf_records: list | None = None) -> float:
     engagement_score = _get_engagement_score(deal, SCORE_WEIGHT_ENGAGEMENT, _perf_records)
     score += engagement_score
 
-    # 5. Lowest-ever badge (0-10)
+    # 5. Lowest-ever badge — use the flag save_deal set BEFORE recording the
+    # price (authoritative, history-guarded). The old live is_lowest_price()
+    # check here fired for every deal because the price was already recorded.
     asin = deal.get("asin", "")
     deal_price = deal.get("deal_price", 0)
-    if asin and deal_price:
-        if is_lowest_price(asin, deal_price):
-            score += SCORE_WEIGHT_BADGE
-        elif is_lowest_in_n_days(asin, deal_price, 90):
-            score += SCORE_WEIGHT_BADGE * 0.6
+    if deal.get("is_lowest_ever"):
+        score += SCORE_WEIGHT_BADGE
+    elif asin and deal_price and qualifies_as_lowest(asin, deal_price, days=90):
+        score += SCORE_WEIGHT_BADGE * 0.6
 
     # 6. Source freshness (0-10)
     scraped_at = deal.get("scraped_at", "")

@@ -74,11 +74,16 @@ AMAZON_ONLY = True           # Only show deals with Amazon links (you earn commi
 
 # Unified pipeline thresholds — all three must pass to auto-post.
 # Nothing meets criteria → deal is silently skipped. No Discord cards.
-PIPELINE_MIN_DISCOUNT = float(os.getenv("PIPELINE_MIN_DISCOUNT", "35"))
-# 52, not 58: the revenue retune zeroed the old engagement half-weight default,
-# which shifted the whole score distribution down ~5-7 pts. 52 preserves the
-# pre-retune selectivity (still needs price sweet-spot + a real-deal signal).
-PIPELINE_MIN_SCORE = float(os.getenv("PIPELINE_MIN_SCORE", "52"))
+# 15 = sanity floor only. The 35 floor double-filtered what the score already
+# weighs (discount is 20 of 100 pts) and dropped premium deals before scoring —
+# Bose/Sony/Apple rarely discount 35%+. Let the score gate be the real quality
+# bar; this just excludes non-deals. NOTE: also set in .env — update both.
+PIPELINE_MIN_DISCOUNT = float(os.getenv("PIPELINE_MIN_DISCOUNT", "15"))
+# 35, recalibrated against live inventory: fixing the lowest-ever badge over-fire
+# (it previously fired for EVERY deal = a phantom +22) dropped honest scores ~17
+# pts. 35 restores ~3-4 posts/run from the current queue. Will rise naturally as
+# real price history + engagement data accumulate. See qualifies_as_lowest().
+PIPELINE_MIN_SCORE = float(os.getenv("PIPELINE_MIN_SCORE", "35"))
 PIPELINE_MIN_CONFIDENCE = float(os.getenv("PIPELINE_MIN_CONFIDENCE", "0.85"))
 # Max auto-posts to X per calendar day. Best-scored deals post first.
 # Prevents flood during big sales (Prime Day etc). Set 0 to disable cap.
