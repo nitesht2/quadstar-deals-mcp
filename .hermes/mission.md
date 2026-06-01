@@ -32,15 +32,22 @@ Pick the 2-3 best genuine deals — real discount, believable price, strong bran
 good rating, or lowest-ever. Prefer eligible, but you MAY override eligibility
 (a premium brand at a thin discount is still worth it). Vary categories. Skip junk.
 
-## 5. WRITE COPY (brand voice)
-Read `config/voice_rules.md`. Per pick: tweet_1 (hook, no link), tweet_2 (link +
-CTA), optionally linkedin_post. All voice rules. No banned words, no em dashes.
+## 5. TIMING + WRITE COPY (brand voice)
+Call `get_posting_insights` once for high-engagement PST hours + already-booked
+slots to avoid. Then per pick write copy from this compact voice guide (do NOT
+read the full voice_rules file — too long): tweet_1 = punchy hook + product +
+the number (price/discount), <270 chars, NO link, end "Link below." + #ad + ONE
+hashtag; tweet_2 = short CTA + link placeholder. Spartan, concrete, human. No em
+dashes. No hype words (amazing, incredible, game-changing, must-have) — state the
+number, not adjectives. Pick a schedule_at (ISO 8601 UTC, 4:30am-7pm PST, favor a
+high-engagement hour, avoid booked slots, >=30 min out; PDT = UTC-7).
 
-## 6. POST IT (through the cage)
-For each pick call `schedule_deal(deal_id, scheduled_at, copy_json)`. The backend
-runs the guards server-side and returns `{ok:true}` or `{ok:false, code, reason}`.
-On refusal, read the code, pick a DIFFERENT deal, try again. Stop at the daily cap.
-You post via schedule_deal now — NOT ingest_deals / run_pipeline / send_cards.
+## 6. PROPOSE (through the cage, human approves)
+For each pick call `propose_deal(deal_id, scheduled_at="<ISO UTC>", copy_json="{...}")`.
+The backend runs the guard cage (dedup, affiliate tag, LIVE price re-verify) and
+sends a Discord APPROVAL card. Returns `{ok:true,code:proposed}` or
+`{ok:false,code,reason}`. On refusal pick a DIFFERENT deal. Max 3. NOTHING posts
+without the human approving — you propose, they approve.
 
 ## 7. REPORT
 One line: how many scheduled + why. One line to improve next run. If you scheduled
