@@ -33,7 +33,7 @@ import requests
 
 SERVICE_URL = os.getenv("QUADSTAR_SERVICE_URL", "http://127.0.0.1:8001")
 HERMES_BIN = os.getenv("HERMES_BIN", "/usr/local/bin/hermes")
-HERMES_MODEL = os.getenv("HERMES_MODEL", "openrouter/deepseek/deepseek-v4-flash")
+HERMES_MODEL = os.getenv("HERMES_MODEL", "openrouter/openai/gpt-4o-mini")
 HERMES_MISSION_FILE = os.getenv("HERMES_MISSION_FILE", "/opt/quadstar-deals/.hermes-mission.txt")
 AGENT_TIMEOUT_SECS = int(os.getenv("AGENT_TIMEOUT_SECS", "900"))
 
