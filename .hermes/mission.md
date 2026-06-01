@@ -19,9 +19,13 @@ categories / price bands / copy angles / times worked and what got rejected.
 `get_posting_insights` — engagement-by-PST-hour, default peaks, already-booked
 slots to avoid, active hours.
 
-## 3. SEE THE MENU
+## 3. SEE THE MENU + EXPAND INVENTORY (your call)
 `get_candidate_deals(limit=10)` — scored, with each deal's discount, score,
 is_lowest_ever, category, and a SOFT eligibility verdict. Nothing is pre-filtered.
+The backend already scraped `tech` as a baseline. If the queue is thin or your
+learning signals show another category converts, call `list_categories` then
+`scrape_category("home")` / `scrape_category("sports")` to pull more, and re-check
+candidates. Don't scrape more than 2 extra categories. You own inventory breadth.
 
 ## 4. JUDGE
 Pick the 2-3 best genuine deals — real discount, believable price, strong brand,

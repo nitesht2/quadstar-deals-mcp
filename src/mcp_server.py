@@ -17,6 +17,7 @@ which holds the real business logic (reused verbatim by tool_router.dispatch).
 Run standalone (stdio transport):  python -m src.mcp_server
 Register in Hermes config as an MCP server pointing at that command.
 """
+import json
 import os
 
 import requests
@@ -60,10 +61,23 @@ def ingest_deals(deals: list[dict]) -> str:
 
 
 @mcp.tool()
-def scrape_deals(category: str = "tech") -> str:
-    """Legacy in-backend scraper (Scrapling/Playwright). Optional during the
-    transition to Hermes-driven scraping — prefer ingest_deals. Returns a count."""
-    return agent._scrape_deals(category)
+def list_categories() -> str:
+    """List the deal categories you can scrape (e.g. tech, home, sports). Use this
+    to decide which categories to hunt this run before calling scrape_category."""
+    from config.categories import list_categories as _lc
+    return json.dumps(_lc())
+
+
+@mcp.tool()
+def scrape_category(category: str) -> str:
+    """Scrape fresh deals for ONE category (Amazon Movers/Deals/Coupons + DealNews
+    + RSS) into the queue. Returns a count summary. YOU choose which categories to
+    hunt: the backend always scrapes 'tech' as a baseline before you run, so call
+    this to EXPAND inventory — e.g. scrape 'home' or 'sports' when the tech queue
+    is thin or feedback shows another category converts. Scraped deals still pass
+    the score gate, the live price-verify cage, and your approval; nothing you
+    scrape posts on its own. Safe to call for a few categories per run."""
+    return _via_service("scrape", category=category)
 
 
 # ── Pipeline + posting ─────────────────────────────────────────────────────────
