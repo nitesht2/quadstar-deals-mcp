@@ -10,16 +10,14 @@ brand_name: "QuadStar Deals"
 brand_hashtag: "#QuadStarDeals"
 affiliate_tag: "quadstar0e-20"
 
-# Aggregator sources (scraped via Firecrawl)
+# Aggregator sources (scraped via Playwright, free — see src/scraper.py).
+# DealNews only: it's the one src/scraper.py renders (others log "Unknown source
+# type, skipping"). Slickdeals is covered separately by src/rss_scraper.py (RSS);
+# Camelcamelcamel removed (anti-bot we can't penetrate). This profile list
+# OVERRIDES config.settings.DEAL_SOURCES — keep them in sync.
 deal_sources:
-  - name: "Slickdeals"
-    url: "https://slickdeals.net/deals/amazon/"
-    type: "aggregator"
   - name: "DealNews"
-    url: "https://www.dealnews.com/s386/Amazon/"
-    type: "aggregator"
-  - name: "Camelcamelcamel"
-    url: "https://camelcamelcamel.com/top_drops/electronics"
+    url: "https://www.dealnews.com/c142/Electronics/"
     type: "aggregator"
 
 # Brands scored as "tier 1" (premium)
