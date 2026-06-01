@@ -19,7 +19,7 @@ import os
 import discord
 from discord.ui import Button, View, Select
 from config.settings import (
-    DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID, BRAND_NAME,
+    DISCORD_CHANNEL_ID,
     DISCORD_TWITTER_CHANNEL_ID, DISCORD_LINKEDIN_CHANNEL_ID,
     DISCORD_REPLY_CHANNEL_ID,
 )
@@ -774,8 +774,7 @@ class PriceDropApproveNowButton(Button):
         try:
             parts = self.custom_id.split(":")
             asin = parts[1] if len(parts) > 1 else ""
-            deal_id = int(parts[2]) if len(parts) > 2 else 0
-            from src.database import get_pending_reposts, remove_pending_repost
+            from src.database import get_pending_reposts
             pending_list = get_pending_reposts()
             pending = next((p for p in pending_list if p.get("asin") == asin), None)
             if not pending:

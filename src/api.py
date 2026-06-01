@@ -161,7 +161,7 @@ def _run_silence_check():
     Skipped during quiet hours (before 8 AM PST) to avoid false alarms on fresh days.
     """
     import time, os
-    from datetime import datetime, date
+    from datetime import datetime
 
     # Only check during active hours — skip before 8 AM to avoid false alarm on new day
     pst_hour = (datetime.utcnow().hour - 7) % 24  # rough PST offset
@@ -178,7 +178,6 @@ def _run_silence_check():
     except Exception:
         pass
 
-    from src.database import get_posts_today_count
     from src.database import _load_deals
     from datetime import timedelta
 
@@ -274,6 +273,7 @@ def _send_startup_alert():
         pass  # Don't crash startup over a notification
 
 
+@asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start Discord bot in background thread
     bot_thread = threading.Thread(target=_start_discord_bot, daemon=True)
@@ -424,7 +424,6 @@ async def call_tool(tool: str, request: Request):
 @app.get("/status")
 async def pipeline_status():
     """Pipeline health dashboard — deals scraped/posted/skipped today, source weights, score distribution."""
-    from src.database import get_posted_deals, get_top_unposted_deals, get_posts_today_count
     from src.database import _load_deals
     from src.source_tracker import _load as _load_source_perf
     from datetime import datetime, timedelta

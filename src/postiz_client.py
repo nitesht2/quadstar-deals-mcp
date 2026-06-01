@@ -105,9 +105,10 @@ def schedule_post(deal: dict, content: dict, platforms: list | str, scheduled_at
     """
     Schedule a deal to social platforms via Postiz.
 
-    Rotates posting format every 4th post to avoid detectable bot patterns:
-    - Posts 0-2: normal two-post thread (tweet_1 hook + tweet_2 reply with link)
-    - Post 3: single tweet with link embedded (no reply thread)
+    Randomizes posting format to avoid detectable bot patterns:
+    - ~75%: normal two-post thread (tweet_1 hook + tweet_2 reply with link)
+    - ~25%: single tweet with link embedded (no reply thread)
+    Random (not a fixed cycle) so X can't detect a pattern.
 
     Args:
         deal: Deal dict with title, image_url, affiliate_url, etc.
@@ -118,8 +119,6 @@ def schedule_post(deal: dict, content: dict, platforms: list | str, scheduled_at
     Returns:
         Postiz API response dict with at least {"status": "ok"} on success.
     """
-    global _POST_FORMAT_COUNTER
-
     if not POSTIZ_API_KEY:
         return {"status": "skipped", "reason": "POSTIZ_API_KEY not set"}
 
@@ -271,7 +270,7 @@ def bump_schedule(deal: dict, content: dict, platforms: list[str]) -> dict:
     3. If conflict: reschedule conflicting post to next available slot
     4. Schedule price drop post at ASAP slot
     """
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime
 
     asap_time, asap_label = get_post_now_time()
     asap_dt = datetime.fromisoformat(asap_time.replace(".000Z", "+00:00"))
