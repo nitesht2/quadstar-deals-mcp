@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Autonomous QuadStar agent run (lean split): backend scrapes (Scrapling), Hermes
-# curates + writes copy in brand voice, then proposes Discord approval cards
-# (human approves). Model = deepseek-v4-flash via OpenRouter (cheap; opus-4.6
-# returns empty via Hermes streaming, sonnet is pricey). timeout caps runaway
-# runs so they can't pile up across the 4 daily cron fires. cwd=/root for state.
-cd /root
-exec timeout 900 /usr/local/bin/hermes -z "$(cat /opt/quadstar-deals/.hermes-mission.txt)" \
-  -m openrouter/deepseek/deepseek-v4-flash --yolo
+# Autonomous QuadStar agentic cycle — via the reliability supervisor.
+#
+# The supervisor (src/agent_supervisor.py) scrapes inventory (backend), runs the
+# Hermes judgment mission (read candidates -> choose -> write voice copy ->
+# schedule_deal, all guard-caged), verifies the agent actually posted, and falls
+# back to the deterministic run_pipeline if the agent no-showed while postable
+# deals existed. So the cycle is agentic AND never goes empty.
+#
+# Model / timeout / mission-file are configurable via env (see agent_supervisor.py).
+# Replaces the old raw `hermes -z` invocation.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export HERMES_MODEL="${HERMES_MODEL:-openrouter/deepseek/deepseek-v4-flash}"
+export HERMES_MISSION_FILE="${HERMES_MISSION_FILE:-$(pwd)/.hermes-mission.txt}"
+exec venv/bin/python -m src.agent_supervisor

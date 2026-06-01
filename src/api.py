@@ -389,6 +389,21 @@ async def debug_run_pipeline():
     return {"result": result}
 
 
+def _scrape_for_agent(category: str = "tech") -> str:
+    """Scrape inventory for the agentic supervisor (no posting). Backend owns
+    scraping — reliable Scrapling — so the agent only does judgment, not its
+    own flaky browser-scrape. Returns a one-line count summary."""
+    from src.amazon_scraper import run_amazon_scraper
+    from src.rss_scraper import run_rss_scraper
+    amz = run_amazon_scraper(category_name=category, fast_track=False)
+    rss = 0
+    try:
+        rss = run_rss_scraper()
+    except Exception as e:
+        print(f"  [scrape] rss failed: {e}")
+    return f"scraped {amz} amazon + {rss} rss ({category})"
+
+
 @app.post("/tools/{tool}")
 async def call_tool(tool: str, request: Request):
     """Run a bot-loop / posting-dependent tool IN THIS process (where the Discord
@@ -409,6 +424,7 @@ async def call_tool(tool: str, request: Request):
                                        str(body.get("platforms", "")),
                                        bool(body.get("ab_test", False))),
         "check_price_drops":       lambda: _a._check_price_drops(),
+        "scrape":                  lambda: _scrape_for_agent(str(body.get("category", "tech"))),
         # Agentic primitives — the agent's decision surface, guard-caged.
         "get_candidate_deals":     lambda: _a._get_candidate_deals(int(body.get("limit", 10))),
         "schedule_deal":           lambda: _a._schedule_deal(
