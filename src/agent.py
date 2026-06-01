@@ -309,6 +309,130 @@ def _get_unposted_deals(limit: int = 5) -> str:
     ])
 
 
+def _get_candidate_deals(limit: int = 10) -> str:
+    """Agentic primitive: the scored MENU of unposted deals — NO gating.
+
+    Unlike get_unposted_deals (which only sorts), this returns each deal's score,
+    the lowest-ever flag, and the deterministic pipeline's *soft* eligibility
+    verdict (discount/score/cooldown) WITHOUT dropping anything. The agent reads
+    this and decides which to post — it may override eligibility with judgment
+    (e.g. a thin-discount premium deal). The hard cage runs later in schedule_deal.
+    """
+    from src.database import (
+        get_top_unposted_deals, score_deal, get_watchlist_asins, _safe_load_json,
+    )
+    from src import guards
+    from config.settings import ASIN_REPOST_COOLDOWN_DAYS
+    import os
+
+    deals = get_top_unposted_deals(limit=limit, min_discount=0.0)
+    if not deals:
+        return json.dumps([])
+
+    perf = _safe_load_json(os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "data", "tweet_performance.json"), [])
+    ctx = guards._ctx_from_settings(
+        recent_asins=set(get_watchlist_asins(days=ASIN_REPOST_COOLDOWN_DAYS)))
+
+    out = []
+    for d in deals:
+        elig = guards.eligibility(d, ctx, _perf_records=perf)
+        out.append({
+            "id": d["id"],
+            "asin": d.get("asin", ""),
+            "title": d["title"][:120],
+            "deal_price": d.get("deal_price"),
+            "original_price": d.get("original_price"),
+            "discount_pct": d.get("discount_pct", 0),
+            "score": round(score_deal(d, _perf_records=perf), 1),
+            "is_lowest_ever": bool(d.get("is_lowest_ever")),
+            "star_rating": d.get("star_rating"),
+            "category": d.get("category", "tech"),
+            "eligible": elig.ok,
+            "eligibility_note": elig.reason,
+        })
+    return json.dumps(out)
+
+
+def _schedule_deal(deal_id: int, platforms: str = "", scheduled_at: str = "",
+                   copy_json: str = "") -> str:
+    """Agentic primitive: post ONE agent-chosen deal — through the hard cage.
+
+    The agent decides WHICH deal, WHEN (scheduled_at ISO, or smart default), the
+    PLATFORMS, and may supply its own voice COPY (copy_json = {"tweet_1","tweet_2",
+    "linkedin_post"}). This function does NOT trust that judgment blindly: it runs
+    guards.enforce_guards() server-side first (dedup, affiliate tag, daily +
+    per-category caps, content confidence, LIVE price re-verify). On any violation
+    it REFUSES and returns the machine code + reason so the agent can learn and
+    pick a different deal. The agent cannot bypass the cage.
+    """
+    from src.database import (
+        get_deal_by_id, mark_as_posted, get_posts_today_count,
+        get_category_posts_today, get_watchlist_asins,
+    )
+    from src.notifier import generate_deal_content
+    from src.platform_router import select_platforms
+    from src.postiz_client import get_smart_time
+    from src import postiz_client, guards
+    from config.settings import ASIN_REPOST_COOLDOWN_DAYS
+
+    deal = get_deal_by_id(deal_id)
+    if not deal:
+        return json.dumps({"ok": False, "code": "not_found", "reason": f"deal {deal_id} not found"})
+
+    # Agent's own voice copy if supplied, else backend LLM.
+    content = None
+    if copy_json:
+        try:
+            c = json.loads(copy_json) if isinstance(copy_json, str) else copy_json
+            if c.get("tweet_1"):
+                content = {"tweet_1": c["tweet_1"], "tweet_2": c.get("tweet_2", ""),
+                           "linkedin_post": c.get("linkedin_post", ""), "confidence": 1.0}
+        except (ValueError, TypeError):
+            content = None
+    if content is None:
+        content = generate_deal_content(deal)
+
+    # Build the cage context from live state.
+    ctx = guards._ctx_from_settings(
+        posts_today=get_posts_today_count(),
+        cat_counts=get_category_posts_today(),
+        recent_asins=set(get_watchlist_asins(days=ASIN_REPOST_COOLDOWN_DAYS)),
+    )
+
+    verdict = guards.enforce_guards(deal, content, ctx)
+    if not verdict.ok:
+        return json.dumps({"ok": False, "code": verdict.code, "reason": verdict.reason,
+                           "deal_id": deal_id, "title": deal.get("title", "")[:60]})
+
+    # Cage passed — the agent's decision is allowed. Post it.
+    platform_list = [p.strip() for p in platforms.split(",") if p.strip()] or select_platforms(deal)
+    sched = scheduled_at.strip() or get_smart_time()[0]
+    result = postiz_client.schedule_post(deal, content, platform_list, scheduled_at=sched)
+    if result.get("status") != "ok":
+        return json.dumps({"ok": False, "code": "postiz_failed",
+                           "reason": result.get("reason", "schedule failed"), "deal_id": deal_id})
+
+    mark_as_posted(deal_id)
+    from src.tweet_learner import record_tweet
+    record_tweet(deal_id, content["tweet_1"], postiz_client.extract_postiz_id(result), sched)
+
+    # Best-effort Discord card (never blocks the post).
+    loop = _get_bot_loop()
+    if loop:
+        import asyncio
+        from src.discord_bot import send_auto_approved_notification
+        try:
+            asyncio.run_coroutine_threadsafe(
+                send_auto_approved_notification(deal, content, sched, platform_list), loop)
+        except Exception as exc:
+            print(f"  [schedule_deal] card send failed: {exc}")
+
+    return json.dumps({"ok": True, "code": "scheduled", "deal_id": deal_id,
+                       "title": deal.get("title", "")[:60], "platforms": platform_list,
+                       "scheduled_at": sched})
+
+
 def _run_pipeline(limit: int = 10) -> str:
     """Unified deal pipeline. Scrape → score → auto-post if gates pass → silent skip otherwise.
 

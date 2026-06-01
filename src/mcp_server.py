@@ -86,6 +86,34 @@ def get_unposted_deals(limit: int = 5) -> str:
 
 
 @mcp.tool()
+def get_candidate_deals(limit: int = 10) -> str:
+    """The scored MENU of unposted deals (JSON) — nothing gated out.
+
+    Each entry has score, discount_pct, is_lowest_ever, category, and the
+    pipeline's SOFT eligibility verdict (eligible + eligibility_note). YOU decide
+    which to post — you may override eligibility with judgment (e.g. a premium
+    deal at a thin discount). The hard cage runs in schedule_deal, not here.
+    This is the agentic alternative to run_pipeline: you pick, code enforces."""
+    return _via_service("get_candidate_deals", limit=limit)
+
+
+@mcp.tool()
+def schedule_deal(deal_id: int, platforms: str = "", scheduled_at: str = "",
+                  copy_json: str = "") -> str:
+    """Post ONE deal you chose — through the un-bypassable guard cage (JSON result).
+
+    You decide: which deal_id (from get_candidate_deals), the platforms (comma
+    list, empty = auto-route), scheduled_at (ISO 8601 UTC, empty = smart time),
+    and optionally your own voice copy_json {"tweet_1","tweet_2","linkedin_post"}.
+    The backend enforces guards server-side FIRST — dedup, affiliate tag, daily +
+    per-category caps, content confidence, LIVE Amazon price re-verify. If a guard
+    fails it REFUSES with {ok:false, code, reason} so you can learn and pick
+    another. You cannot bypass the cage. On success: {ok:true, scheduled_at, ...}."""
+    return _via_service("schedule_deal", deal_id=deal_id, platforms=platforms,
+                        scheduled_at=scheduled_at, copy_json=copy_json)
+
+
+@mcp.tool()
 def generate_and_send_cards(limit: int = 5) -> str:
     """Generate tweet content for top unposted deals and send Discord approval
     cards (the human gate). Returns how many cards were sent."""

@@ -409,6 +409,13 @@ async def call_tool(tool: str, request: Request):
                                        str(body.get("platforms", "")),
                                        bool(body.get("ab_test", False))),
         "check_price_drops":       lambda: _a._check_price_drops(),
+        # Agentic primitives — the agent's decision surface, guard-caged.
+        "get_candidate_deals":     lambda: _a._get_candidate_deals(int(body.get("limit", 10))),
+        "schedule_deal":           lambda: _a._schedule_deal(
+                                       int(body.get("deal_id", 0) or 0),
+                                       str(body.get("platforms", "")),
+                                       str(body.get("scheduled_at", "")),
+                                       str(body.get("copy_json", ""))),
     }
     fn = tools.get(tool)
     if not fn:
